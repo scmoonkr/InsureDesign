@@ -2,184 +2,64 @@
 
 ## Markdown Policy
 
-Markdown = 기본 문서
-Block = Markdown 안의 특수 UI
+CMS 본문은 Markdown을 기본 원본으로 사용한다.
 
-## Example
+```txt
+Markdown = 기본 문서
+Block = Markdown 안에 들어가는 제한된 UI 확장 문법
+```
+
+Block은 별도의 자유형 편집 시스템이 아니다. 작성자는 정해진 block만 Markdown 안에 삽입할 수 있다.
+
+## Storage
+
+DB에는 원본 Markdown과 렌더링 캐시를 함께 저장할 수 있다.
+
+```js
+{
+  markdown,
+  html,
+  blocks,
+  plainText,
+  searchText
+}
+```
+
+수정 시에는 항상 `markdown`을 원본으로 사용한다.
+
+```txt
+markdown 수정
+-> markdown parser 실행
+-> custom block parser 실행
+-> html, blocks, plainText, searchText 재생성
+-> DB 저장
+```
+
+## Basic Syntax
 
 ```md
 # 제목
 
-본문
-
-:::notice
-공지 내용
-:::
-
-다음 본문
-```
-
-## Supported Blocks
-
-```txt
-notice
-highlight
-quote
-youtube
-button
-gallery
-imageGrid
-slide
-cards
-hero
-```
-
-## imageGrid Example
-
-```md
-:::imageGrid
-columns: 3
-
-images:
-- imageId: img1
-- imageId: img2
-- imageId: img3
-:::
-```
-
-## slide Example
-
-```md
-:::slide
-slides:
-- imageId: img1
-  title: 제목
-  desc: 설명
-:::
-```
-
-## Rules
-
-허용:
-
-```txt
-Block 삽입
-Markdown 작성
-```
-
-금지:
-
-```txt
-custom HTML 전체 허용
-custom CSS 전체 허용
-drag/drop page builder
-absolute position 지정
-```
-
-# Markdown & Block Policy
-
-## 기본 방향
-
-이 CMS의 콘텐츠 본문은 Markdown을 기본으로 한다.
-
-Markdown은 글 작성, 수정, 백업, 이전, AI 생성에 유리하며, WordPress식 자유 편집보다 훨씬 가볍고 안정적이다.
-
-핵심 구조는 다음과 같다.
-
-```txt
-Markdown = 기본 문서
-Block = Markdown 안에 들어가는 특수 UI 문법
-```
-
-즉, Block을 별도 편집 시스템으로 만들지 않고 Markdown 안에 포함한다.
-
-## Markdown 저장 방식
-
-DB에는 원본 Markdown과 변환된 HTML을 함께 저장할 수 있다.
-
-```js
-{
-  markdown: "...",
-  html: "..."
-}
-```
-
-역할은 다음과 같다.
-
-```txt
-markdown = 원본 데이터
-html = 렌더링 캐시
-```
-
-수정할 때는 항상 markdown을 기준으로 한다.
-
-```txt
-markdown 수정
-→ markdown parser 실행
-→ custom block parser 실행
-→ html 재생성
-→ DB 저장
-```
-
-공개 페이지에서는 가능하면 html을 사용해 렌더링 비용을 줄인다.
-
-## Markdown 작성 예시
-
-```md
-# 주일예배 안내
-
-이번 주 주일예배는 오전 11시에 본당에서 드립니다.
-
-예배 후에는 소그룹 나눔이 있습니다.
-```
-
-## Block 기본 개념
-
-Markdown만으로 표현하기 어려운 UI는 Block 문법으로 처리한다.
-
-예를 들면 공지 박스, 강조 박스, 유튜브, 버튼, 이미지 그리드, 슬라이드 등을 Block으로 만든다.
-
-Block은 별도 DB 구조가 아니라 Markdown 안에 들어간다.
-
-```md
-# 주일예배 안내
-
 본문 내용입니다.
 
 :::notice
-이번 주 예배 장소가 변경되었습니다.
+중요 공지 내용입니다.
 :::
 
 다음 본문이 이어집니다.
 ```
 
-## Block 문법
+## Block Syntax
 
-기본 문법은 다음을 사용한다.
+기본 문법은 아래 형식을 사용한다.
 
 ```md
 :::blockName
-내용
+content
 :::
 ```
 
-예시:
-
-```md
-:::notice
-중요 공지입니다.
-:::
-```
-
-옵션이 필요한 경우 다음과 같이 작성한다.
-
-```md
-:::notice type="warning"
-중요 공지입니다.
-:::
-```
-
-또는 YAML 스타일로 작성할 수 있다.
+옵션이 필요한 경우 YAML 스타일을 우선 사용한다.
 
 ```md
 :::button
@@ -189,9 +69,9 @@ style: primary
 :::
 ```
 
-## 초기 지원 Block
+## Initial Supported Blocks
 
-초기에는 다음 Block만 지원한다.
+초기에는 아래 block만 지원한다.
 
 ```txt
 notice
@@ -206,7 +86,7 @@ file
 map
 ```
 
-사이트 성격에 따라 이후 다음 Block을 추가할 수 있다.
+추후 사이트 성격에 따라 아래 block을 추가할 수 있다.
 
 ```txt
 sermonInfo
@@ -222,9 +102,28 @@ timeline
 stats
 ```
 
-## notice Block
+새 block은 코드로 검증 가능한 형태로만 추가한다.
 
-공지 박스용 Block이다.
+## Block Validation
+
+저장 전 block을 반드시 검증한다.
+
+```txt
+허용된 block인지 확인
+필수 필드 존재 여부 확인
+imageId가 같은 siteId에 존재하는지 확인
+button url이 허용된 형식인지 확인
+youtube url이 정상인지 확인
+hero block을 허용된 contentType에서만 사용하는지 확인
+```
+
+본문 block에서 참조하는 이미지와 콘텐츠의 `siteId`는 반드시 같아야 한다.
+
+```txt
+content.siteId === image.siteId
+```
+
+## notice Block
 
 ```md
 :::notice
@@ -232,37 +131,31 @@ stats
 :::
 ```
 
-옵션 예시:
-
 ```md
-:::notice type="warning"
+:::notice
+type: warning
+
 이번 주 예배 장소가 변경되었습니다.
 :::
 ```
 
 ## highlight Block
 
-본문 중 중요한 내용을 강조할 때 사용한다.
-
 ```md
 :::highlight
-이번 말씀의 핵심은 믿음으로 반응하는 삶입니다.
+본문 중 중요한 내용을 강조합니다.
 :::
 ```
 
 ## quote Block
 
-인용문을 표현할 때 사용한다.
-
 ```md
 :::quote
-읽는다는 것은 단순히 글자를 보는 것이 아니라 생각을 깨우는 일입니다.
+인용문 내용을 표시합니다.
 :::
 ```
 
 ## youtube Block
-
-유튜브 영상을 삽입할 때 사용한다.
 
 ```md
 :::youtube
@@ -274,8 +167,6 @@ https://www.youtube.com/watch?v=xxxx
 
 ## button Block
 
-버튼 링크를 삽입할 때 사용한다.
-
 ```md
 :::button
 text: 예배 안내 보기
@@ -284,13 +175,9 @@ style: primary
 :::
 ```
 
-렌더링 시에는 미리 정의된 버튼 스타일로 출력한다.
-
-사용자가 직접 색상, padding, margin을 지정하지 못하게 한다.
+작성자가 직접 색상, padding, margin을 지정할 수 없다. `style`은 CMS가 미리 정의한 값만 허용한다.
 
 ## gallery Block
-
-여러 이미지를 갤러리 형태로 보여줄 때 사용한다.
 
 ```md
 :::gallery
@@ -303,8 +190,6 @@ imageIds:
 
 ## imageGrid Block
 
-이미지를 격자 형태로 보여줄 때 사용한다.
-
 ```md
 :::imageGrid
 columns: 3
@@ -316,42 +201,30 @@ images:
 - imageId: img_002
   caption: 수련회
 - imageId: img_003
-  caption: 찬양팀
+  caption: 찬양대
 :::
 ```
 
-렌더링 시에는 `ImageGridBlock` 컴포넌트로 변환한다.
-
-```vue
-<ImageGridBlock
-  :columns="3"
-  :gap="'medium'"
-  :images="images"
-/>
-```
+렌더링 시에는 `ImageGridBlock` component로 변환한다.
 
 ## slide Block
-
-슬라이드 또는 캐러셀을 보여줄 때 사용한다.
 
 ```md
 :::slide
 slides:
 - imageId: img_001
-  title: 독서 수준 측정
-  desc: Reader KRIN을 통해 현재 독서 능력을 확인합니다.
+  title: 첫 번째 슬라이드
+  desc: 설명 문구
 
 - imageId: img_002
-  title: 맞춤 도서 추천
-  desc: Optimal Reading Zone에 맞는 책을 추천합니다.
+  title: 두 번째 슬라이드
+  desc: 설명 문구
 :::
 ```
 
-렌더링 시에는 `SlideBlock` 또는 `CarouselBlock` 컴포넌트로 변환한다.
+렌더링 시에는 `SlideBlock` 또는 `CarouselBlock` component로 변환한다.
 
 ## cards Block
-
-카드형 정보 묶음을 표현할 때 사용한다.
 
 ```md
 :::cards
@@ -359,62 +232,46 @@ columns: 3
 style: shadow
 
 items:
-- title: KRIN 측정
-  desc: 독서 수준을 분석합니다.
+- title: 카드 제목
+  desc: 카드 설명
   imageId: img_001
-
-- title: 맞춤 추천
-  desc: 아이에게 맞는 책을 추천합니다.
-  imageId: img_002
-
-- title: 성장 기록
-  desc: 읽기 성장을 데이터로 확인합니다.
-  imageId: img_003
 :::
 ```
 
-## hero Block
+`cards`는 초기 필수 block이 아니며, 사이트 요구가 있을 때 추가한다.
 
-페이지 상단 대표 영역이 필요한 경우 사용한다.
+## hero Block
 
 ```md
 :::hero
-title: ReadFit
-subtitle: 독서를 사고력 훈련으로
+title: 사이트 이름
+subtitle: 소개 문구
 imageId: hero_001
 buttonText: 시작하기
 buttonUrl: /start
 :::
 ```
 
-단, hero는 모든 콘텐츠에 허용하지 않고 page 또는 landing 타입 콘텐츠에서만 허용하는 것을 권장한다.
+`hero`는 모든 콘텐츠에서 허용하지 않는다. `page` 또는 landing 성격의 template에서만 허용하는 것을 기본 정책으로 한다.
 
-## Block 렌더링 흐름
+## Render Flow
 
 ```txt
 Markdown 입력
-→ Markdown parser
-→ Custom block parser
-→ Block object 생성
-→ Vue BlockRenderer
-→ 실제 Vue component 출력
+-> Markdown parser
+-> Custom block parser
+-> Block object 생성
+-> Vue BlockRenderer
+-> 실제 Vue component 출력
 ```
 
 예시:
-
-```md
-:::notice
-공지 내용
-:::
-```
-
-변환 결과:
 
 ```js
 {
   type: "notice",
   props: {
-    content: "공지 내용"
+    content: "중요 공지 내용"
   }
 }
 ```
@@ -425,21 +282,12 @@ Vue 렌더링:
 <BlockRenderer :blocks="blocks" />
 ```
 
-내부 처리:
+## Freedom Limits
 
-```vue
-<NoticeBlock v-if="block.type === 'notice'" />
-<ImageGridBlock v-if="block.type === 'imageGrid'" />
-<SlideBlock v-if="block.type === 'slide'" />
-```
-
-## Block 사용 원칙
-
-Block은 콘텐츠 표현을 위한 제한된 UI이다.
-
-다음은 허용한다.
+허용:
 
 ```txt
+Markdown 작성
 notice 넣기
 button 넣기
 youtube 넣기
@@ -448,7 +296,7 @@ slide 넣기
 cards 넣기
 ```
 
-다음은 금지한다.
+금지:
 
 ```txt
 사용자 custom HTML 전체 입력
@@ -461,38 +309,8 @@ drag/drop page builder
 Gutenberg식 전체 block editor
 ```
 
-## 왜 Markdown 안에 Block을 넣는가?
+## Principle
 
-이 방식의 장점은 다음과 같다.
+본문은 Markdown으로 관리하고, 특수 UI는 Markdown 안의 제한된 Block으로 처리한다.
 
-```txt
-DB 구조가 단순하다.
-작성 흐름이 자연스럽다.
-백업과 이전이 쉽다.
-AI로 콘텐츠 생성하기 쉽다.
-디자인 통제가 가능하다.
-WordPress식 복잡성을 피할 수 있다.
-```
-
-## 권장 비율
-
-대부분의 콘텐츠는 일반 Markdown으로 작성한다.
-
-```txt
-Markdown 80~90%
-Block 10~20%
-```
-
-Block은 꼭 필요한 UI 표현에만 사용한다.
-
-## 결론
-
-이 CMS의 본문 구조는 다음 원칙을 따른다.
-
-```txt
-본문은 Markdown
-특수 UI는 Markdown 안의 Block
-디자인은 Template과 Style Family가 통제
-사용자는 정해진 Block만 선택
-완전 자유 편집은 금지
-```
+디자인은 Template과 StyleFamily가 통제하며, 작성자는 정해진 범위 안에서만 표현을 선택한다.

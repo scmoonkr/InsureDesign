@@ -1,0 +1,46 @@
+import { spawn } from 'node:child_process'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { loadEnv } from '../api-server/config.mjs'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const rootDir = path.resolve(__dirname, '..')
+
+function getPortFromUrl(value, fallback) {
+  if (!value) {
+    return fallback
+  }
+
+  try {
+    const url = new URL(value)
+    return Number(url.port || (url.protocol === 'https:' ? 443 : 80))
+  } catch {
+    return fallback
+  }
+}
+
+loadEnv()
+
+const apiPort = process.env.PORT || '9000'
+const webPort = String(process.env.NUXT_PORT || getPortFromUrl(process.env.SITE_URL, 9001))
+const command = process.execPath
+const nuxiPath = path.join(rootDir, 'node_modules', '@nuxt', 'cli', 'bin', 'nuxi.mjs')
+
+const child = spawn(command, [nuxiPath, 'dev'], {
+  env: {
+    ...process.env,
+    API_PORT: apiPort,
+    PORT: webPort,
+    NUXT_PORT: webPort,
+  },
+  stdio: 'inherit',
+})
+
+child.on('exit', (code, signal) => {
+  if (signal) {
+    process.kill(process.pid, signal)
+    return
+  }
+
+  process.exit(code ?? 0)
+})
