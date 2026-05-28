@@ -1,11 +1,11 @@
 <template>
-  <DefaultThemeErrataPage />
+  <component :is="theme.components.errataPage" />
 </template>
 
 <script setup lang="ts">
-import DefaultThemeErrataPage from '~/components/public/DefaultThemeErrataPage.vue'
-
 definePageMeta({
-  layout: false,
+  layout: 'default',
 })
+
+const { theme } = useSiteTheme()
 </script>

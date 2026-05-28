@@ -1,8 +1,17 @@
 import http from 'node:http'
+import fs from 'node:fs'
+import path from 'node:path'
+import { createHash } from 'node:crypto'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { URL } from 'node:url'
 import { clearAuthSession, createOAuthState, getAuthSession, setAuthSession, verifyOAuthState } from './auth-session.mjs'
 import { getConfig, loadEnv } from './config.mjs'
-import { getUserById, listUsers, updateUserProfile, upsertSocialUser } from './auth-service.mjs'
+import { deleteUserById, getUserById, listUsers, updateUserProfile, upsertSocialUser } from './auth-service.mjs'
+import { listMedia, createMedia, updateMediaMeta } from './media-service.mjs'
+import { getSiteConfig, updateSiteTheme, getSiteSettings, updateSiteSettings } from './settings-service.mjs'
+import { listSites, getSiteById, getSiteByDomain, createSite, updateSite, addDomain, removeDomain } from './sites-service.mjs'
+import { resolvePublicSiteId, getAdminSiteId, checkAdmin, checkSession, isSuperUser } from './middleware.mjs'
+import { listContents, getContentById, createContent, updateContent, deleteContent, listPublicContents, getPublicContentBySlug, titleToSlug } from './contents-service.mjs'
 
 loadEnv()
 
@@ -73,17 +82,17 @@ function sendError(req, res, statusCode, message) {
 }
 
 function applyCors(req, res) {
-  const { siteUrl } = getConfig()
+  const { allowedOrigins } = getConfig()
   const origin = req.headers.origin
 
-  if (origin === siteUrl) {
+  if (origin && allowedOrigins.includes(origin)) {
     res.setHeader('access-control-allow-origin', origin)
     res.setHeader('access-control-allow-credentials', 'true')
     res.setHeader('vary', 'Origin')
   }
 
-  res.setHeader('access-control-allow-methods', 'GET,POST,PUT,OPTIONS')
-  res.setHeader('access-control-allow-headers', 'content-type')
+  res.setHeader('access-control-allow-methods', 'GET,POST,PUT,DELETE,OPTIONS')
+  res.setHeader('access-control-allow-headers', 'content-type,x-site-host,x-admin-site')
 }
 
 async function readJsonBody(req) {
@@ -98,6 +107,46 @@ async function readJsonBody(req) {
   }
 
   return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+}
+
+function validateSiteInput(input, requireSiteId = true) {
+  const siteId = typeof input.siteId === 'string' ? input.siteId.trim() : ''
+  const name = typeof input.name === 'string' ? input.name.trim() : ''
+
+  if (requireSiteId) {
+    if (!siteId || !/^[a-z0-9][a-z0-9-]*[a-z0-9]$/.test(siteId) || siteId.length > 64) {
+      return { error: 'siteId must be 2-64 lowercase alphanumeric characters and hyphens.' }
+    }
+  }
+
+  if (!name || name.length > 100) {
+    return { error: 'name must be between 1 and 100 characters.' }
+  }
+
+  const status = ['active', 'disabled', 'maintenance'].includes(input.status) ? input.status : 'active'
+  const locale = typeof input.locale === 'string' ? input.locale.slice(0, 10) : 'ko'
+  const timezone = typeof input.timezone === 'string' ? input.timezone.slice(0, 50) : 'Asia/Seoul'
+  const themeId = typeof input.themeId === 'string' ? input.themeId.slice(0, 64) : 'default'
+  const primaryDomain = typeof input.primaryDomain === 'string' ? input.primaryDomain.trim().toLowerCase() : null
+
+  return { value: { siteId, name, status, locale, timezone, themeId, primaryDomain } }
+}
+
+function validateDomainInput(input) {
+  const host = typeof input.host === 'string' ? input.host.trim().toLowerCase() : ''
+  if (!host || host.length > 253) {
+    return { error: 'host is required (max 253 characters).' }
+  }
+  if (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?$/.test(host)) {
+    return { error: 'host must be a valid hostname.' }
+  }
+  return {
+    value: {
+      host,
+      isPrimary: input.isPrimary === true,
+      status: input.status || 'active',
+    },
+  }
 }
 
 function validateProfileInput(input) {
@@ -256,6 +305,528 @@ async function handleUpdateBackendUser(req, res, userId) {
 
   sendJson(req, res, 200, { user })
 }
+
+async function handleDeleteBackendUser(req, res, userId) {
+  const session = getAuthSession(req)
+  if (!session) {
+    sendError(req, res, 401, 'Unauthorized')
+    return
+  }
+
+  const deleted = await deleteUserById(userId)
+  if (!deleted) {
+    sendError(req, res, 404, 'User not found')
+    return
+  }
+
+  sendJson(req, res, 200, { ok: true })
+}
+
+// ── Media: helpers ──────────────────────────────────────────────────────────
+
+async function readRawBody(req, maxBytes) {
+  const chunks = []
+  let total = 0
+  for await (const chunk of req) {
+    total += chunk.length
+    if (total > maxBytes) {
+      throw Object.assign(new Error('Request too large'), { statusCode: 413 })
+    }
+    chunks.push(chunk)
+  }
+  return Buffer.concat(chunks)
+}
+
+function getMultipartBoundary(contentType) {
+  if (!contentType) return null
+  const m = contentType.match(/;\s*boundary=(?:"([^"]*)"|([^\s;]*))/i)
+  return m?.[1] || m?.[2] || null
+}
+
+function parseMultipart(body, boundary) {
+  const parts = []
+  const boundaryBuf = Buffer.from(`\r\n--${boundary}`)
+  const startBuf = Buffer.from(`--${boundary}\r\n`)
+
+  let pos = body.indexOf(startBuf)
+  if (pos === -1) return parts
+  pos += startBuf.length
+
+  while (pos < body.length) {
+    const headerEnd = body.indexOf(Buffer.from('\r\n\r\n'), pos)
+    if (headerEnd === -1) break
+
+    const headerText = body.slice(pos, headerEnd).toString('utf8')
+    pos = headerEnd + 4
+
+    const next = body.indexOf(boundaryBuf, pos)
+    if (next === -1) break
+
+    const data = body.slice(pos, next)
+    pos = next + boundaryBuf.length
+
+    const headers = {}
+    for (const line of headerText.split('\r\n')) {
+      const ci = line.indexOf(':')
+      if (ci === -1) continue
+      headers[line.slice(0, ci).trim().toLowerCase()] = line.slice(ci + 1).trim()
+    }
+
+    const disp = headers['content-disposition'] || ''
+    const nameM = disp.match(/;\s*name="([^"]*)"/)
+    const filenameM = disp.match(/;\s*filename="([^"]*)"/)
+
+    parts.push({
+      name: nameM?.[1] || '',
+      filename: filenameM?.[1] || null,
+      contentType: headers['content-type'] || null,
+      data,
+    })
+
+    if (body[pos] === 0x2d && body[pos + 1] === 0x2d) break
+    if (body[pos] === 0x0d && body[pos + 1] === 0x0a) pos += 2
+    else break
+  }
+
+  return parts
+}
+
+function buildUploadPaths(uploadDir, siteId, originalName, hash) {
+  const now = new Date()
+  const yyyy = String(now.getFullYear())
+  const mm = String(now.getMonth() + 1).padStart(2, '0')
+  const prefix = hash.slice(0, 2)
+  const ext = path.extname(originalName).toLowerCase() || ''
+  const base = path.basename(originalName, ext)
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 48)
+  const uid = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
+  const filename = `${uid}-${base}${ext}`
+  const relPath = `sites/${siteId}/${yyyy}/${mm}/${prefix}/${filename}`
+  return {
+    fullDir: path.resolve(uploadDir, 'sites', siteId, yyyy, mm, prefix),
+    fullPath: path.resolve(uploadDir, 'sites', siteId, yyyy, mm, prefix, filename),
+    urlPath: `/uploads/${relPath}`,
+  }
+}
+
+function safeJoinPath(base, sub) {
+  const full = path.resolve(base, sub)
+  const resolved = path.resolve(base)
+  return full.startsWith(resolved + path.sep) ? full : null
+}
+
+const UPLOAD_MIME_TYPES = {
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
+  '.png': 'image/png', '.gif': 'image/gif',
+  '.webp': 'image/webp', '.svg': 'image/svg+xml',
+  '.mp4': 'video/mp4', '.webm': 'video/webm',
+}
+
+const ALLOWED_UPLOAD_MIME = /^(image\/(jpeg|png|gif|webp|svg\+xml)|video\/(mp4|webm))$/
+
+// ── Media: route handlers ────────────────────────────────────────────────────
+
+async function handleStaticUpload(req, res, reqPath) {
+  const { uploadDir } = getConfig()
+  const sub = decodeURIComponent(reqPath.slice('/uploads/'.length))
+  const fullPath = safeJoinPath(uploadDir, sub)
+
+  if (!fullPath) {
+    sendError(req, res, 403, 'Forbidden')
+    return
+  }
+
+  let stat
+  try {
+    stat = await fs.promises.stat(fullPath)
+  } catch {
+    sendError(req, res, 404, 'Not found')
+    return
+  }
+
+  if (!stat.isFile()) {
+    sendError(req, res, 404, 'Not found')
+    return
+  }
+
+  const ext = path.extname(fullPath).toLowerCase()
+  const mimeType = UPLOAD_MIME_TYPES[ext] || 'application/octet-stream'
+
+  applyCors(req, res)
+  res.writeHead(200, {
+    'content-type': mimeType,
+    'content-length': stat.size,
+    'cache-control': 'public, max-age=31536000, immutable',
+  })
+  fs.createReadStream(fullPath).pipe(res)
+}
+
+async function handleListMedia(req, res) {
+  const session = getAuthSession(req)
+  if (!session) {
+    sendError(req, res, 401, 'Unauthorized')
+    return
+  }
+
+  const { apiBase } = getConfig()
+  const siteId = getAdminSiteId(req, new URL(req.url || '/', getConfig().apiBase))
+  const items = await listMedia(siteId)
+  const result = items.map(item => ({
+    ...item,
+    paths: item.paths?.original
+      ? { ...item.paths, original: `${apiBase}${item.paths.original}` }
+      : item.paths,
+  }))
+
+  sendJson(req, res, 200, { items: result })
+}
+
+async function handleUploadMedia(req, res) {
+  const session = getAuthSession(req)
+  if (!session) {
+    sendError(req, res, 401, 'Unauthorized')
+    return
+  }
+
+  const contentType = req.headers['content-type'] || ''
+  const boundary = getMultipartBoundary(contentType)
+  if (!boundary) {
+    sendError(req, res, 400, 'Expected multipart/form-data')
+    return
+  }
+
+  let body
+  try {
+    body = await readRawBody(req, 256 * 1024 * 1024)
+  } catch {
+    sendError(req, res, 413, 'Request entity too large')
+    return
+  }
+
+  const parts = parseMultipart(body, boundary).filter(p => p.filename && p.data.length > 0)
+  if (!parts.length) {
+    sendError(req, res, 400, 'No files found')
+    return
+  }
+
+  const { uploadDir, apiBase } = getConfig()
+  const siteId = getAdminSiteId(req, new URL(req.url || '/', getConfig().apiBase))
+  const savedItems = []
+
+  for (const part of parts) {
+    const mimeType = part.contentType?.split(';')[0].trim() || ''
+    if (!ALLOWED_UPLOAD_MIME.test(mimeType)) continue
+
+    const hash = createHash('sha256').update(part.data).digest('hex')
+    const { fullDir, fullPath, urlPath } = buildUploadPaths(
+      uploadDir, siteId, part.filename, hash,
+    )
+
+    await mkdir(fullDir, { recursive: true })
+    await writeFile(fullPath, part.data)
+
+    const title = path.basename(part.filename, path.extname(part.filename))
+
+    const item = await createMedia({
+      siteId,
+      title,
+      originalName: part.filename,
+      filename: path.basename(fullPath),
+      mimeType,
+      size: part.data.length,
+      hash,
+      paths: { original: urlPath },
+      uploadedBy: session.id,
+    })
+
+    savedItems.push({
+      ...item,
+      paths: { ...item.paths, original: `${apiBase}${item.paths.original}` },
+    })
+  }
+
+  sendJson(req, res, 200, { items: savedItems })
+}
+
+async function handleUpdateMedia(req, res, mediaId) {
+  const session = getAuthSession(req)
+  if (!session) {
+    sendError(req, res, 401, 'Unauthorized')
+    return
+  }
+
+  const input = await readJsonBody(req)
+  const item = await updateMediaMeta(mediaId, input)
+  if (!item) {
+    sendError(req, res, 404, 'Media not found')
+    return
+  }
+
+  const { apiBase } = getConfig()
+  sendJson(req, res, 200, {
+    item: {
+      ...item,
+      paths: item.paths?.original
+        ? { ...item.paths, original: `${apiBase}${item.paths.original}` }
+        : item.paths,
+    },
+  })
+}
+
+// ── Sites CRUD ───────────────────────────────────────────────────────────────
+
+async function handleListSites(req, res) {
+  const auth = checkSession(req)
+  if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
+
+  const user = await getUserById(auth.session.id)
+  if (!user || user.status !== 'active') { sendError(req, res, 401, 'Unauthorized'); return }
+
+  const isSuper = isSuperUser(user.roles || [])
+  let sites
+  if (isSuper) {
+    sites = await listSites()
+  } else {
+    const siteIds = [...new Set((user.roles || []).map(r => r.siteId).filter(Boolean))]
+    const results = await Promise.all(siteIds.map(id => getSiteById(id)))
+    sites = results.filter(Boolean)
+  }
+
+  sendJson(req, res, 200, { sites, isSuper })
+}
+
+async function handleCreateSite(req, res) {
+  const auth = checkSession(req)
+  if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
+
+  const user = await getUserById(auth.session.id)
+  if (!user || user.status !== 'active') { sendError(req, res, 401, 'Unauthorized'); return }
+  if (!isSuperUser(user.roles || [])) { sendError(req, res, 403, 'Super role required to create sites'); return }
+
+  const input = await readJsonBody(req)
+  const validation = validateSiteInput(input)
+  if (validation.error) { sendError(req, res, 400, validation.error); return }
+
+  try {
+    const site = await createSite(validation.value)
+    sendJson(req, res, 201, { site })
+  } catch (err) {
+    sendError(req, res, err.statusCode || 500, err.message)
+  }
+}
+
+async function handleGetSite(req, res, siteId) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+
+  const site = await getSiteById(siteId)
+  if (!site) { sendError(req, res, 404, 'Site not found'); return }
+
+  sendJson(req, res, 200, { site })
+}
+
+async function handleUpdateSite(req, res, siteId) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+
+  const input = await readJsonBody(req)
+  const validation = validateSiteInput(input, false)
+  if (validation.error) { sendError(req, res, 400, validation.error); return }
+
+  const site = await updateSite(siteId, validation.value)
+  if (!site) { sendError(req, res, 404, 'Site not found'); return }
+
+  sendJson(req, res, 200, { site })
+}
+
+async function handleAddDomain(req, res, siteId) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+
+  const input = await readJsonBody(req)
+  const validation = validateDomainInput(input)
+  if (validation.error) { sendError(req, res, 400, validation.error); return }
+
+  try {
+    const site = await addDomain(siteId, validation.value)
+    if (!site) { sendError(req, res, 404, 'Site not found'); return }
+    sendJson(req, res, 200, { site })
+  } catch (err) {
+    sendError(req, res, err.statusCode || 500, err.message)
+  }
+}
+
+async function handleRemoveDomain(req, res, siteId, host) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+
+  const site = await removeDomain(siteId, host)
+  if (!site) { sendError(req, res, 404, 'Site not found'); return }
+
+  sendJson(req, res, 200, { site })
+}
+
+async function handleGetSiteSettings(req, res, siteId) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+
+  const settings = await getSiteSettings(siteId)
+  sendJson(req, res, 200, settings)
+}
+
+async function handleUpdateSiteSettings(req, res, siteId) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+
+  const input = await readJsonBody(req)
+  const result = await updateSiteSettings(siteId, input)
+  sendJson(req, res, 200, result)
+}
+
+// ── Contents ──────────────────────────────────────────────────────────────────
+
+function validateContentInput(input) {
+  const CONTENT_TYPES = ['post', 'page', 'notice', 'gallery']
+  const contentType = CONTENT_TYPES.includes(input.contentType) ? input.contentType : null
+  if (!contentType) return { error: `contentType must be one of: ${CONTENT_TYPES.join(', ')}.` }
+
+  const title = typeof input.title === 'string' ? input.title.trim() : ''
+  if (!title || title.length > 200) return { error: 'title must be 1–200 characters.' }
+
+  const status = ['draft', 'published', 'hidden'].includes(input.status) ? input.status : 'draft'
+  const visibility = ['public', 'members', 'private'].includes(input.visibility) ? input.visibility : 'public'
+
+  return {
+    value: {
+      contentType,
+      title,
+      slug: typeof input.slug === 'string' ? input.slug.trim() : '',
+      summary: typeof input.summary === 'string' ? input.summary.trim().slice(0, 500) : '',
+      markdown: typeof input.markdown === 'string' ? input.markdown : '',
+      template: typeof input.template === 'string' ? input.template : null,
+      styleFamily: typeof input.styleFamily === 'string' ? input.styleFamily : null,
+      status,
+      visibility,
+    },
+  }
+}
+
+// Admin: list contents for a siteId
+async function handleListContents(req, res, url) {
+  const siteId = getAdminSiteId(req, url)
+  const auth = await checkAdmin(req, siteId, 'viewer')
+  if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
+
+  const { items, total } = await listContents(siteId, {
+    contentType: url.searchParams.get('type') || null,
+    status: url.searchParams.get('status') || null,
+    limit: url.searchParams.get('limit') || 50,
+    skip: url.searchParams.get('skip') || 0,
+  })
+  sendJson(req, res, 200, { items, total })
+}
+
+// Admin: create content
+async function handleCreateContent(req, res, url) {
+  const siteId = getAdminSiteId(req, url)
+  const auth = await checkAdmin(req, siteId, 'writer')
+  if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
+
+  const input = await readJsonBody(req)
+  const validation = validateContentInput(input)
+  if (validation.error) { sendError(req, res, 400, validation.error); return }
+
+  const content = await createContent({ ...validation.value, siteId }, auth.user.id)
+  sendJson(req, res, 201, { content })
+}
+
+// Admin: get single content
+async function handleGetContent(req, res, contentId, url) {
+  const siteId = getAdminSiteId(req, url)
+  const auth = await checkAdmin(req, siteId, 'viewer')
+  if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
+
+  const content = await getContentById(siteId, contentId)
+  if (!content) { sendError(req, res, 404, 'Content not found'); return }
+
+  sendJson(req, res, 200, { content })
+}
+
+// Admin: update content
+async function handleUpdateContent(req, res, contentId, url) {
+  const siteId = getAdminSiteId(req, url)
+  const auth = await checkAdmin(req, siteId, 'writer')
+  if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
+
+  const input = await readJsonBody(req)
+  const content = await updateContent(contentId, siteId, input, auth.user.id)
+  if (!content) { sendError(req, res, 404, 'Content not found'); return }
+
+  sendJson(req, res, 200, { content })
+}
+
+// Admin: delete content (soft)
+async function handleDeleteContent(req, res, contentId, url) {
+  const siteId = getAdminSiteId(req, url)
+  const auth = await checkAdmin(req, siteId, 'manager')
+  if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
+
+  const deleted = await deleteContent(contentId, siteId, auth.user.id)
+  if (!deleted) { sendError(req, res, 404, 'Content not found'); return }
+
+  sendJson(req, res, 200, { ok: true })
+}
+
+// Public: list published contents
+async function handlePublicListContents(req, res, url) {
+  const siteId = await resolvePublicSiteId(req)
+  const { items, total } = await listPublicContents(siteId, {
+    contentType: url.searchParams.get('type') || null,
+    limit: url.searchParams.get('limit') || 20,
+    skip: url.searchParams.get('skip') || 0,
+  })
+  sendJson(req, res, 200, { items, total })
+}
+
+// Public: get single published content by slug
+async function handlePublicGetContent(req, res, slug) {
+  const siteId = await resolvePublicSiteId(req)
+  const content = await getPublicContentBySlug(siteId, slug)
+  if (!content) { sendError(req, res, 404, 'Not found'); return }
+
+  sendJson(req, res, 200, { content })
+}
+
+// ── Site config / Settings ───────────────────────────────────────────────────
+
+async function handleGetSiteConfig(req, res) {
+  const siteId = await resolvePublicSiteId(req)
+  const config = await getSiteConfig(siteId)
+  sendJson(req, res, 200, { theme: config.theme || 'default', siteId })
+}
+
+async function handleUpdateSiteTheme(req, res) {
+  const session = getAuthSession(req)
+  if (!session) {
+    sendError(req, res, 401, 'Unauthorized')
+    return
+  }
+
+  const { theme } = await readJsonBody(req)
+  if (!theme || typeof theme !== 'string') {
+    sendError(req, res, 400, 'theme is required')
+    return
+  }
+
+  const siteId = getAdminSiteId(req, new URL(req.url || '/', getConfig().apiBase))
+  const result = await updateSiteTheme(siteId, theme)
+  sendJson(req, res, 200, result)
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
 
 async function handleAuthStart(req, res, provider) {
   if (!AUTHORIZE_URLS[provider]) {
@@ -459,6 +1030,11 @@ async function handleRequest(req, res) {
       return
     }
 
+    if (req.method === 'DELETE' && backendUserMatch) {
+      await handleDeleteBackendUser(req, res, backendUserMatch[1])
+      return
+    }
+
     const authStartMatch = url.pathname.match(/^\/api\/auth\/(naver|kakao)$/)
     if (req.method === 'GET' && authStartMatch) {
       await handleAuthStart(req, res, authStartMatch[1])
@@ -468,6 +1044,102 @@ async function handleRequest(req, res) {
     const authCallbackMatch = url.pathname.match(/^\/api\/auth\/(naver|kakao)\/callback$/)
     if (req.method === 'GET' && authCallbackMatch) {
       await handleAuthCallback(req, res, authCallbackMatch[1], url)
+      return
+    }
+
+    // ── Admin: Contents ──────────────────────────────────────────────────────
+    if (req.method === 'GET' && url.pathname === '/api/admin/contents') {
+      await handleListContents(req, res, url)
+      return
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/admin/contents') {
+      await handleCreateContent(req, res, url)
+      return
+    }
+
+    const adminContentMatch = url.pathname.match(/^\/api\/admin\/contents\/([^/]+)$/)
+    if (adminContentMatch) {
+      if (req.method === 'GET') { await handleGetContent(req, res, adminContentMatch[1], url); return }
+      if (req.method === 'PUT') { await handleUpdateContent(req, res, adminContentMatch[1], url); return }
+      if (req.method === 'DELETE') { await handleDeleteContent(req, res, adminContentMatch[1], url); return }
+    }
+
+    // ── Public: Contents ─────────────────────────────────────────────────────
+    if (req.method === 'GET' && url.pathname === '/api/public/contents') {
+      await handlePublicListContents(req, res, url)
+      return
+    }
+
+    const publicContentSlugMatch = url.pathname.match(/^\/api\/public\/contents\/([^/]+)$/)
+    if (req.method === 'GET' && publicContentSlugMatch) {
+      await handlePublicGetContent(req, res, decodeURIComponent(publicContentSlugMatch[1]))
+      return
+    }
+
+    // ── Admin: Sites ─────────────────────────────────────────────────────────
+    if (req.method === 'GET' && url.pathname === '/api/admin/sites') {
+      await handleListSites(req, res)
+      return
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/admin/sites') {
+      await handleCreateSite(req, res)
+      return
+    }
+
+    const adminSiteSettingsMatch = url.pathname.match(/^\/api\/admin\/sites\/([^/]+)\/settings$/)
+    if (adminSiteSettingsMatch) {
+      if (req.method === 'GET') { await handleGetSiteSettings(req, res, adminSiteSettingsMatch[1]); return }
+      if (req.method === 'PUT') { await handleUpdateSiteSettings(req, res, adminSiteSettingsMatch[1]); return }
+    }
+
+    const adminSiteMatch = url.pathname.match(/^\/api\/admin\/sites\/([^/]+)$/)
+    if (adminSiteMatch) {
+      if (req.method === 'GET') { await handleGetSite(req, res, adminSiteMatch[1]); return }
+      if (req.method === 'PUT') { await handleUpdateSite(req, res, adminSiteMatch[1]); return }
+    }
+
+    const adminSiteDomainMatch = url.pathname.match(/^\/api\/admin\/sites\/([^/]+)\/domains$/)
+    if (req.method === 'POST' && adminSiteDomainMatch) {
+      await handleAddDomain(req, res, adminSiteDomainMatch[1])
+      return
+    }
+
+    const adminSiteDomainHostMatch = url.pathname.match(/^\/api\/admin\/sites\/([^/]+)\/domains\/(.+)$/)
+    if (req.method === 'DELETE' && adminSiteDomainHostMatch) {
+      await handleRemoveDomain(req, res, adminSiteDomainHostMatch[1], decodeURIComponent(adminSiteDomainHostMatch[2]))
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/public/site-config') {
+      await handleGetSiteConfig(req, res)
+      return
+    }
+
+    if (req.method === 'PUT' && url.pathname === '/api/admin/settings/theme') {
+      await handleUpdateSiteTheme(req, res)
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname.startsWith('/uploads/')) {
+      await handleStaticUpload(req, res, url.pathname)
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/admin/media') {
+      await handleListMedia(req, res)
+      return
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/admin/media/upload') {
+      await handleUploadMedia(req, res)
+      return
+    }
+
+    const adminMediaMatch = url.pathname.match(/^\/api\/admin\/media\/([^/]+)$/)
+    if (adminMediaMatch && req.method === 'PUT') {
+      await handleUpdateMedia(req, res, adminMediaMatch[1])
       return
     }
 

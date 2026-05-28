@@ -26,7 +26,7 @@ siteId 접근 권한
 ```txt
 /api/admin/sites
 /api/admin/contents
-/api/admin/images
+/api/admin/media
 /api/admin/menus
 ```
 

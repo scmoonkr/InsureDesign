@@ -1,24 +1,35 @@
 <template>
   <header class="theme-topbar">
-    <div class="theme-topbar-inner">
+    <div
+      :class="[
+        'theme-topbar-inner',
+        {
+          'theme-topbar-inner-full': fullWidth,
+          'theme-topbar-inner-backend': backendMode,
+        },
+      ]"
+    >
       <NuxtLink class="theme-brand" to="/theme/default">
         <img class="theme-logo" :src="logoSrc" alt="Default theme logo" />
         <span class="theme-brand-text">{{ title }}</span>
       </NuxtLink>
 
+      <div v-if="toolbarTitle && !backendMode" class="theme-topbar-title">{{ toolbarTitle }}</div>
+
       <button
+        v-if="!hideNav || backendMenuButton"
         :class="['theme-menu-button', { open: isMobileMenuOpen }]"
         type="button"
         :aria-expanded="isMobileMenuOpen"
         :aria-label="isMobileMenuOpen ? 'Close menu' : 'Open menu'"
-        @click="toggleMobileMenu"
+        @click="handleMenuButtonClick"
       >
         <span></span>
         <span></span>
         <span></span>
       </button>
 
-      <nav :class="['theme-nav', { open: isMobileMenuOpen }]">
+      <nav v-if="!hideNav" :class="['theme-nav', { open: isMobileMenuOpen }]">
         <NuxtLink
           v-for="item in items"
           :key="item.to"
@@ -37,7 +48,7 @@
         </template>
       </nav>
 
-      <div class="theme-auth">
+      <div v-if="!hideNav" class="theme-auth">
         <NuxtLink v-if="!user" class="theme-login" to="/login">Login</NuxtLink>
         <div v-else ref="accountMenuRef" class="theme-user">
           <button
@@ -68,13 +79,21 @@
 </template>
 
 <script setup lang="ts">
-defineProps<{
+const props = defineProps<{
   title: string
+  fullWidth?: boolean
+  backendMode?: boolean
+  toolbarTitle?: string
+  hideNav?: boolean
+  backendMenuButton?: boolean
   items: Array<{
     label: string
     to: string
     current?: boolean
   }>
+}>()
+const emit = defineEmits<{
+  (e: 'backend-menu-toggle'): void
 }>()
 
 const logoSrc = '/themes/default/logo.png'
@@ -119,6 +138,15 @@ function closeAccountMenu() {
 function toggleMobileMenu() {
   isAccountMenuOpen.value = false
   isMobileMenuOpen.value = !isMobileMenuOpen.value
+}
+
+function handleMenuButtonClick() {
+  if (props.hideNav && props.backendMenuButton) {
+    emit('backend-menu-toggle')
+    return
+  }
+
+  toggleMobileMenu()
 }
 
 function closeMobileMenu() {

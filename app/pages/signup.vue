@@ -6,6 +6,6 @@
 import LoginPage from './login.vue'
 
 definePageMeta({
-  layout: false,
+  layout: 'default',
 })
 </script>

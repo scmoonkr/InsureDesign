@@ -6,6 +6,6 @@
 import DefaultThemeErrataPage from '~/components/public/DefaultThemeErrataPage.vue'
 
 definePageMeta({
-  layout: false,
+  layout: 'default',
 })
 </script>

@@ -6,6 +6,6 @@
 import DefaultThemeIndexPage from '~/components/public/DefaultThemeIndexPage.vue'
 
 definePageMeta({
-  layout: false,
+  layout: 'default',
 })
 </script>

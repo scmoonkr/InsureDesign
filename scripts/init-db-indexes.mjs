@@ -92,7 +92,7 @@ const collections = [
   'users',
   'categories',
   'tags',
-  'images',
+  'media',
   'contents',
   'menus',
   'settings',
@@ -134,7 +134,7 @@ const indexesByCollection = {
     },
     { keys: { siteId: 1, usageCount: -1 }, options: { name: 'idx_site_usageCount' } },
   ],
-  images: [
+  media: [
     { keys: { siteId: 1, createdAt: -1 }, options: { name: 'idx_site_createdAt' } },
     { keys: { siteId: 1, hash: 1 }, options: { name: 'idx_site_hash' } },
   ],

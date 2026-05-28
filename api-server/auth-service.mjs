@@ -131,3 +131,27 @@ export async function updateUserProfile(userId, input) {
 
   return toPublicUser(user)
 }
+
+export async function deleteUserById(userId) {
+  if (!ObjectId.isValid(userId)) {
+    return false
+  }
+
+  const db = await getMongoDb()
+  const now = new Date()
+  const result = await db.collection('users').updateOne(
+    {
+      _id: new ObjectId(userId),
+      isDeleted: { $ne: true },
+    },
+    {
+      $set: {
+        isDeleted: true,
+        deletedAt: now,
+        updatedAt: now,
+      },
+    },
+  )
+
+  return result.modifiedCount > 0
+}

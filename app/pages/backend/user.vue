@@ -1,26 +1,23 @@
-<template>
+﻿<template>
   <div class="theme-backend">
-    <DefaultThemeTopbar title="Korean Swimming Registry" :items="navItems" />
+    <DefaultThemeTopbar
+      title="Korean Swimming Registry"
+      :items="navItems"
+      full-width
+      backend-mode
+      backend-menu-button
+      hide-nav
+      toolbar-title="User Edit."
+      @backend-menu-toggle="isSidebarOpen = !isSidebarOpen"
+    />
+    <div v-if="isSidebarOpen" class="theme-backend-menu-backdrop" @click="isSidebarOpen = false"></div>
 
     <div class="theme-backend-shell">
-      <aside class="theme-backend-menu">
-        <div class="theme-backend-menu-title">Backend Menu</div>
-        <nav class="theme-backend-nav">
-          <NuxtLink
-            v-for="item in menuItems"
-            :key="item.key"
-            :class="{ current: item.key === 'users' }"
-            :to="item.to"
-          >
-            {{ item.label }}
-            <span>{{ item.key }}</span>
-          </NuxtLink>
-        </nav>
-      </aside>
+      <BackendSidebar :open="isSidebarOpen" current-key="users" @close="isSidebarOpen = false" />
 
       <main class="theme-backend-main">
         <div class="theme-backend-head">
-          <h1>User <span class="theme-em">Edit.</span></h1>
+          <h1>User Edit.</h1>
           <NuxtLink class="theme-backend-link" to="/backend/users">Back to users</NuxtLink>
         </div>
 
@@ -101,9 +98,10 @@
 
 <script setup lang="ts">
 import DefaultThemeTopbar from '~/components/public/DefaultThemeTopbar.vue'
+import BackendSidebar from '~/components/admin/BackendSidebar.vue'
 
 definePageMeta({
-  layout: false,
+  layout: 'default',
 })
 
 type BackendUser = {
@@ -119,21 +117,7 @@ type BackendUser = {
   status?: string
 }
 
-const navItems = [
-  { label: 'The Index', to: '/' },
-  { label: 'The Errata', to: '/errata' },
-  { label: 'Backend', to: '/backend', current: true },
-  { label: 'Admin', to: '/admin' },
-]
-
-const menuItems = [
-  { key: 'pages', label: 'Pages', to: '/backend' },
-  { key: 'posts', label: 'Posts', to: '/backend' },
-  { key: 'categories', label: 'Categories', to: '/backend' },
-  { key: 'tags', label: 'Tags', to: '/backend' },
-  { key: 'images', label: 'Images', to: '/backend' },
-  { key: 'users', label: 'Users', to: '/backend/users' },
-]
+const { navItems } = useBackendMenu()
 
 const route = useRoute()
 const config = useRuntimeConfig()
@@ -170,6 +154,7 @@ const providerLabel = computed(() => {
 
   return `${user.value.provider.toUpperCase()} account / ${user.value.providerId}`
 })
+const isSidebarOpen = ref(false)
 
 watch(
   user,
@@ -221,3 +206,6 @@ async function saveUser() {
   }
 }
 </script>
+
+
+

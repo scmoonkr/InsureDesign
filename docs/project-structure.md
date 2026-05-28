@@ -144,7 +144,7 @@ siteId 접근 권한
 
 ```txt
 contents
-images
+media
 menus
 sites
 users

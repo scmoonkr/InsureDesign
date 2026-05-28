@@ -16,7 +16,7 @@
 import DefaultThemeTopbar from '~/components/public/DefaultThemeTopbar.vue'
 
 definePageMeta({
-  layout: false,
+  layout: 'default',
 })
 
 const navItems = [

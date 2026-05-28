@@ -9,7 +9,7 @@ sites
 users
 categories
 tags
-images
+media
 contents
 menus
 ```
@@ -199,7 +199,7 @@ db.tags.createIndex({ siteId: 1, slug: 1 }, { unique: true })
 db.tags.createIndex({ siteId: 1, usageCount: -1 })
 ```
 
-## images
+## media
 
 ```js
 {
@@ -247,8 +247,8 @@ db.tags.createIndex({ siteId: 1, usageCount: -1 })
 ### Index
 
 ```js
-db.images.createIndex({ siteId: 1, createdAt: -1 })
-db.images.createIndex({ siteId: 1, hash: 1 })
+db.media.createIndex({ siteId: 1, createdAt: -1 })
+db.media.createIndex({ siteId: 1, hash: 1 })
 ```
 
 ## contents

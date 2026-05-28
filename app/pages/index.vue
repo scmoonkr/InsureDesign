@@ -1,11 +1,11 @@
 <template>
-  <DefaultThemeIndexPage />
+  <component :is="theme.components.indexPage" />
 </template>
 
 <script setup lang="ts">
-import DefaultThemeIndexPage from '~/components/public/DefaultThemeIndexPage.vue'
-
 definePageMeta({
-  layout: false,
+  layout: 'default',
 })
+
+const { theme } = useSiteTheme()
 </script>

@@ -10,7 +10,11 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "db:init": "node scripts/init-db-indexes.mjs",
-    "db:verify": "node scripts/verify-db-indexes.mjs"
+    "db:verify": "node scripts/verify-db-indexes.mjs",
+    "clear": "node scripts/clear-data.mjs",
+    "clear:db": "node scripts/clear-data.mjs --db",
+    "clear:media": "node scripts/clear-data.mjs --media",
+    "clear:drop": "node scripts/clear-data.mjs --drop"
   },
   "dependencies": {
     "mongodb": "^7.2.0",

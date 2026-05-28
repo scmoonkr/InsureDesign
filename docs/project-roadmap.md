@@ -144,7 +144,7 @@ server/services/sites.js
 server/services/contents.js
 server/services/categories.js
 server/services/tags.js
-server/services/images.js
+server/services/media.js
 server/services/menus.js
 server/services/users.js
 ```
@@ -171,7 +171,7 @@ image usedIn 갱신
 /api/admin/contents
 /api/admin/categories
 /api/admin/tags
-/api/admin/images
+/api/admin/media
 /api/admin/menus
 ```
 
@@ -250,7 +250,7 @@ API가 어느 정도 안정된 뒤 관리자 UI를 구현한다.
 /admin
 /admin/contents
 /admin/contents/new
-/admin/images
+/admin/media
 /admin/menus
 /admin/settings
 ```
@@ -316,7 +316,7 @@ webp 변환
 large/medium/thumb 생성
 metadata 저장
 hash 저장
-images collection 저장
+media collection 저장
 ```
 
 이후 storage provider를 분리한다.
