@@ -26,12 +26,7 @@ const provider = String(route.params.provider || '')
 const title = ref('Signing you in.')
 const message = ref('Please wait while we finish your login.')
 
-const navItems = [
-  { label: 'The Index', to: '/' },
-  { label: 'The Errata', to: '/errata' },
-  { label: 'Backend', to: '/backend' },
-  { label: 'Admin', to: '/admin' },
-]
+const navItems = useSiteNav('header')
 
 onMounted(async () => {
   try {

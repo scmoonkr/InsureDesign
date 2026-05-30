@@ -30,20 +30,44 @@
       </button>
 
       <nav v-if="!hideNav" :class="['theme-nav', { open: isMobileMenuOpen }]">
-        <NuxtLink
-          v-for="item in items"
-          :key="item.to"
-          :class="{ current: item.current }"
-          :to="item.to"
-          @click="closeMobileMenu"
-        >
-          {{ item.label }}
-        </NuxtLink>
+        <template v-for="item in items" :key="item.to + '-' + item.label">
+          <!-- 대표메뉴 (URL 없음) — 클릭 불가, 하위 항목 있으면 dropdown -->
+          <div v-if="item.isHeader || (item.children && item.children.length)" class="theme-nav-group">
+            <span
+              v-if="item.isHeader"
+              :class="['theme-nav-header', { current: item.current }]"
+            >{{ item.label }}<span v-if="item.children && item.children.length" class="theme-nav-caret">▾</span></span>
+            <NuxtLink
+              v-else
+              :class="['theme-nav-with-children', { current: item.current }]"
+              :to="item.to"
+              :target="item.target === 'blank' ? '_blank' : undefined"
+              @click="closeMobileMenu"
+            >{{ item.label }} <span class="theme-nav-caret">▾</span></NuxtLink>
+
+            <div v-if="item.children && item.children.length" class="theme-nav-dropdown">
+              <NuxtLink
+                v-for="child in item.children"
+                :key="child.to + '-' + child.label"
+                :to="child.to"
+                :target="child.target === 'blank' ? '_blank' : undefined"
+                :class="{ current: child.current }"
+                @click="closeMobileMenu"
+              >{{ child.label }}</NuxtLink>
+            </div>
+          </div>
+
+          <NuxtLink
+            v-else
+            :class="{ current: item.current }"
+            :to="item.to"
+            :target="item.target === 'blank' ? '_blank' : undefined"
+            @click="closeMobileMenu"
+          >{{ item.label }}</NuxtLink>
+        </template>
 
         <template v-if="user">
           <div class="theme-mobile-menu-divider"></div>
-          <NuxtLink to="/profile" @click="closeMobileMenu">Profile</NuxtLink>
-          <NuxtLink to="/my-page" @click="closeMobileMenu">My Page</NuxtLink>
           <button class="theme-mobile-menu-action" type="button" @click="logout">Logout</button>
         </template>
       </nav>
@@ -90,6 +114,14 @@ const props = defineProps<{
     label: string
     to: string
     current?: boolean
+    target?: 'self' | 'blank'
+    isHeader?: boolean
+    children?: Array<{
+      label: string
+      to: string
+      current?: boolean
+      target?: 'self' | 'blank'
+    }>
   }>
 }>()
 const emit = defineEmits<{

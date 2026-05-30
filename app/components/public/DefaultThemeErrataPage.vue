@@ -43,12 +43,7 @@ import DefaultThemeFooter from '~/components/public/DefaultThemeFooter.vue'
 import DefaultThemeTable from '~/components/public/DefaultThemeTable.vue'
 import DefaultThemeTopbar from '~/components/public/DefaultThemeTopbar.vue'
 
-const navItems = [
-  { label: 'The Index', to: '/' },
-  { label: 'The Errata', to: '/errata', current: true },
-  { label: 'Backend', to: '/backend' },
-  { label: 'Admin', to: '/admin' },
-]
+const navItems = useSiteNav('header')
 
 const columns = [
   { key: 'rank', label: 'No.' },

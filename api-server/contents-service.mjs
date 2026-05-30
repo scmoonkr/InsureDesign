@@ -1,5 +1,164 @@
 import { getMongoDb } from './mongo.mjs'
 import { ObjectId } from 'mongodb'
+import { parseMarkdownBlocks, blocksToPlainText } from './markdown-blocks.mjs'
+import { validateParsedBlocks, applyBlockDefaults } from './markdown-blocks-validator.mjs'
+import { renderBlocksToHtml } from './markdown-render.mjs'
+import { getMediaByIds } from './media-service.mjs'
+
+// Walk every block node, recursing into row columns. Used for image-id collection
+// and other tree-wide passes so container blocks don't hide their children.
+function walkAllNodes(nodes, fn) {
+  for (const n of nodes) {
+    fn(n)
+    if (n.type === 'row' && Array.isArray(n.props?.columns)) {
+      for (const col of n.props.columns) {
+        if (Array.isArray(col)) walkAllNodes(col, fn)
+      }
+    }
+  }
+}
+
+// Collect all image IDs referenced across image-based blocks (gallery/imageGrid/slide).
+// Recurses into row children so images inside columns are picked up.
+export function collectImageIds(nodes) {
+  const ids = new Set()
+  walkAllNodes(nodes, n => {
+    if (n.type === 'gallery' && Array.isArray(n.props?.imageIds)) {
+      for (const id of n.props.imageIds) if (typeof id === 'string') ids.add(id)
+    } else if (n.type === 'imageGrid' && Array.isArray(n.props?.items)) {
+      for (const it of n.props.items) if (it && typeof it.imageId === 'string') ids.add(it.imageId)
+    } else if (n.type === 'slide' && Array.isArray(n.props?.items)) {
+      for (const it of n.props.items) if (it && typeof it.imageId === 'string') ids.add(it.imageId)
+    } else if (n.type === 'title' && typeof n.props?.imageId === 'string' && n.props.imageId) {
+      ids.add(n.props.imageId)
+    } else if (n.type === 'timeline' && Array.isArray(n.props?.items)) {
+      for (const it of n.props.items) {
+        if (it && typeof it.imageId === 'string' && it.imageId) ids.add(it.imageId)
+      }
+    }
+  })
+  return [...ids]
+}
+
+// Collect missing imageIds for a single node against the given mediaMap.
+function missingImageIdsForNode(n, mediaMap) {
+  const missing = []
+  const check = (id) => { if (id && !mediaMap[id]) missing.push(id) }
+  if (n.type === 'gallery') (n.props?.imageIds || []).forEach(check)
+  else if (n.type === 'imageGrid' || n.type === 'slide') {
+    (n.props?.items || []).forEach(it => check(it?.imageId))
+  } else if (n.type === 'title') {
+    if (n.props?.imageId) check(n.props.imageId)
+  } else if (n.type === 'timeline') {
+    (n.props?.items || []).forEach(it => { if (it?.imageId) check(it.imageId) })
+  }
+  return missing
+}
+
+// Walk the (possibly nested) node tree and call fn(node, label) for every node,
+// emitting "Block #N" or "Block #N > 컬럼 #M > Block #K" style labels so error
+// messages match the validator's path format.
+function walkWithLabels(nodes, fn, prefix = '') {
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i]
+    const label = `${prefix}Block #${i + 1}`
+    fn(n, label)
+    if (n.type === 'row' && Array.isArray(n.props?.columns)) {
+      n.props.columns.forEach((col, c) => {
+        if (Array.isArray(col)) walkWithLabels(col, fn, `${label} > 컬럼 #${c + 1} > `)
+      })
+    }
+  }
+}
+
+// Verify every referenced imageId resolves to a media doc in the same siteId.
+// Returns error array. Also annotates blocks with `_media` lookup map for the renderer.
+async function validateAndEnrichImages(nodes, siteId) {
+  const referenced = collectImageIds(nodes)
+  if (!referenced.length) return []
+  const mediaMap = await getMediaByIds(siteId, referenced)
+  const errors = []
+  walkWithLabels(nodes, (n, label) => {
+    const missing = missingImageIdsForNode(n, mediaMap)
+    if (missing.length) {
+      errors.push(`${label} (${n.type}): siteId의 미디어에서 찾을 수 없는 imageId — ${missing.join(', ')}`)
+    }
+    // Annotate leaf blocks so the renderer can resolve image URLs.
+    if (n.type !== 'row') n.props._media = mediaMap
+  })
+  return errors
+}
+
+// Recursively strip the transient `_media` annotation from every node.
+function stripMedia(nodes) {
+  return nodes.map(n => {
+    let props = n.props
+    if (props?._media) {
+      const { _media, ...rest } = props
+      props = rest
+    }
+    if (n.type === 'row' && Array.isArray(props?.columns)) {
+      props = { ...props, columns: props.columns.map(col => stripMedia(col)) }
+    }
+    return props === n.props ? n : { ...n, props }
+  })
+}
+
+// Dry-run for the editor preview. Returns parsed blocks + mediaMap and any
+// validation errors WITHOUT throwing — letting the UI show the user what's wrong.
+export async function previewMarkdown(markdown, siteId, { allowedBlocks } = {}) {
+  const parsed = parseMarkdownBlocks(markdown || '')
+  const schemaErrors = validateParsedBlocks(parsed, { allowedBlocks })
+  const withDefaults = applyBlockDefaults(parsed)
+  const ids = collectImageIds(withDefaults)
+  const mediaMap = (siteId && ids.length) ? await getMediaByIds(siteId, ids) : {}
+
+  // Image siteId mismatch detection (analogous to validateAndEnrichImages)
+  const imgErrors = []
+  walkWithLabels(withDefaults, (n, label) => {
+    const missing = missingImageIdsForNode(n, mediaMap)
+    if (missing.length) {
+      imgErrors.push(`${label} (${n.type}): siteId의 미디어에서 찾을 수 없는 imageId — ${missing.join(', ')}`)
+    }
+  })
+
+  const blocks = stripMedia(withDefaults)
+
+  return {
+    blocks,
+    mediaMap,
+    errors: [...schemaErrors, ...imgErrors],
+  }
+}
+
+// Parse + validate + render markdown into the four cache fields.
+// Throws Error('Block validation: ...') on invalid block usage.
+async function compileMarkdown(markdown, { siteId, allowedBlocks } = {}) {
+  const parsed = parseMarkdownBlocks(markdown || '')
+  const errors = validateParsedBlocks(parsed, { allowedBlocks })
+  if (errors.length) {
+    const err = new Error(`Block validation: ${errors.join(' | ')}`)
+    err.blockErrors = errors
+    throw err
+  }
+  const withDefaults = applyBlockDefaults(parsed)
+
+  // Image ref check + URL map (only meaningful when siteId is known)
+  if (siteId) {
+    const imgErrors = await validateAndEnrichImages(withDefaults, siteId)
+    if (imgErrors.length) {
+      const err = new Error(`Block validation: ${imgErrors.join(' | ')}`)
+      err.blockErrors = imgErrors
+      throw err
+    }
+  }
+
+  const html = renderBlocksToHtml(withDefaults)
+  const plainText = blocksToPlainText(withDefaults)
+  // Strip transient _media from cached blocks (frontend re-fetches via URLs in renderer output)
+  const blocks = stripMedia(withDefaults)
+  return { blocks, html, plainText }
+}
 
 // ── Slug helpers ──────────────────────────────────────────────────────────────
 
@@ -77,12 +236,29 @@ export async function getContentById(siteId, id) {
   return serializeContent(doc)
 }
 
+function toObjectIdArray(input) {
+  if (!Array.isArray(input)) return []
+  const seen = new Set()
+  const out = []
+  for (const v of input) {
+    if (v instanceof ObjectId) {
+      const k = v.toString()
+      if (!seen.has(k)) { seen.add(k); out.push(v) }
+    } else if (typeof v === 'string' && ObjectId.isValid(v)) {
+      if (!seen.has(v)) { seen.add(v); out.push(new ObjectId(v)) }
+    }
+  }
+  return out
+}
+
 export async function createContent(data, authorId) {
   const db = await getMongoDb()
   const now = new Date()
 
   const slugBase = data.slug ? data.slug.trim() : titleToSlug(data.title)
   const slug = await generateUniqueSlug(db, data.siteId, slugBase)
+
+  const compiled = await compileMarkdown(data.markdown || '', { siteId: data.siteId, allowedBlocks: data.allowedBlocks })
 
   const doc = {
     siteId: data.siteId,
@@ -94,13 +270,15 @@ export async function createContent(data, authorId) {
     template: data.template || null,
     styleFamily: data.styleFamily || null,
     markdown: data.markdown || '',
-    html: null,
-    blocks: [],
-    plainText: data.markdown || '',
-    searchText: `${data.title} ${data.markdown || ''}`.trim(),
-    categoryIds: [],
-    tagIds: [],
-    thumbnailImageId: null,
+    html: compiled.html,
+    blocks: compiled.blocks,
+    plainText: compiled.plainText,
+    searchText: `${data.title} ${data.summary || ''} ${compiled.plainText}`.trim(),
+    categoryIds: toObjectIdArray(data.categoryIds),
+    tagIds: toObjectIdArray(data.tagIds),
+    thumbnailImageId: data.thumbnailImageId && ObjectId.isValid(data.thumbnailImageId)
+      ? new ObjectId(data.thumbnailImageId)
+      : null,
     imageIds: [],
     status: data.status || 'draft',
     visibility: data.visibility || 'public',
@@ -108,7 +286,7 @@ export async function createContent(data, authorId) {
     publishedAt: data.status === 'published' ? now : null,
     scheduledAt: null,
     expiredAt: null,
-    meta: {},
+    meta: data.meta && typeof data.meta === 'object' ? { ...data.meta } : {},
     revisionNo: 0,
     createdAt: now,
     updatedAt: now,
@@ -152,12 +330,19 @@ export async function updateContent(id, siteId, fields, userId) {
   const now = new Date()
   const allowed = [
     'title', 'summary', 'markdown', 'template', 'styleFamily',
-    'status', 'visibility', 'categoryIds', 'tagIds', 'thumbnailImageId', 'meta',
+    'status', 'visibility', 'thumbnailImageId', 'meta',
   ]
   const update = { updatedAt: now, updatedBy: userId || null }
 
   for (const key of allowed) {
     if (Object.hasOwn(fields, key)) update[key] = fields[key]
+  }
+  if (Object.hasOwn(fields, 'categoryIds')) update.categoryIds = toObjectIdArray(fields.categoryIds)
+  if (Object.hasOwn(fields, 'tagIds')) update.tagIds = toObjectIdArray(fields.tagIds)
+  if (Object.hasOwn(fields, 'thumbnailImageId')) {
+    update.thumbnailImageId = fields.thumbnailImageId && ObjectId.isValid(fields.thumbnailImageId)
+      ? new ObjectId(fields.thumbnailImageId)
+      : null
   }
 
   // Regenerate slug when title changes (unless explicit slug provided)
@@ -176,9 +361,13 @@ export async function updateContent(id, siteId, fields, userId) {
   }
 
   const newTitle = fields.title !== undefined ? fields.title : existing.title
+  const newSummary = fields.summary !== undefined ? fields.summary : (existing.summary || '')
   const newMarkdown = fields.markdown !== undefined ? fields.markdown : existing.markdown
-  update.plainText = newMarkdown || ''
-  update.searchText = `${newTitle} ${newMarkdown || ''}`.trim()
+  const compiled = await compileMarkdown(newMarkdown, { siteId, allowedBlocks: fields.allowedBlocks })
+  update.blocks = compiled.blocks
+  update.html = compiled.html
+  update.plainText = compiled.plainText
+  update.searchText = `${newTitle} ${newSummary} ${compiled.plainText}`.trim()
   update.revisionNo = (existing.revisionNo || 0) + 1
 
   const result = await db.collection('contents').findOneAndUpdate(

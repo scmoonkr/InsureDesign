@@ -63,3 +63,30 @@ export async function updateMediaMeta(id, fields) {
   )
   return serializeMedia(result)
 }
+
+// Look up media docs by IDs for a specific siteId. Returns map id → { id, paths, ... }.
+// Missing IDs / wrong siteId / soft-deleted items are simply omitted.
+export async function getMediaByIds(siteId, ids) {
+  if (!Array.isArray(ids) || !ids.length) return {}
+  const objectIds = ids.filter(id => typeof id === 'string' && ObjectId.isValid(id))
+    .map(id => new ObjectId(id))
+  if (!objectIds.length) return {}
+  const db = await getMongoDb()
+  const docs = await db.collection('media')
+    .find({ _id: { $in: objectIds }, siteId, isDeleted: { $ne: true } })
+    .toArray()
+  const map = {}
+  for (const d of docs) map[String(d._id)] = serializeMedia(d)
+  return map
+}
+
+export async function deleteMedia(id, siteId, userId) {
+  if (!ObjectId.isValid(id)) return false
+  const db = await getMongoDb()
+  const now = new Date()
+  const result = await db.collection('media').updateOne(
+    { _id: new ObjectId(id), siteId, isDeleted: { $ne: true } },
+    { $set: { isDeleted: true, deletedAt: now, deletedBy: userId || null, updatedAt: now } },
+  )
+  return result.modifiedCount > 0
+}

@@ -50,12 +50,7 @@ import DefaultThemeHero from '~/components/public/DefaultThemeHero.vue'
 import DefaultThemeTable from '~/components/public/DefaultThemeTable.vue'
 import DefaultThemeTopbar from '~/components/public/DefaultThemeTopbar.vue'
 
-const navItems = [
-  { label: 'The Index', to: '/', current: true },
-  { label: 'The Errata', to: '/errata' },
-  { label: 'Backend', to: '/backend' },
-  { label: 'Admin', to: '/admin' },
-]
+const navItems = useSiteNav('header')
 
 const columns = [
   { key: 'rank', label: 'Rank' },

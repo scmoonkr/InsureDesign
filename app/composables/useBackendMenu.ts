@@ -7,7 +7,10 @@ export function useBackendMenu() {
   ]
 
   const menuItems = [
-    { key: 'contents', label: 'Contents', to: '/backend/contents' },
+    { key: 'posts', label: 'Posts', to: '/backend/posts' },
+    { key: 'pages', label: 'Pages', to: '/backend/pages' },
+    { key: 'categories', label: 'Categories', to: '/backend/categories' },
+    { key: 'menus', label: 'Menus', to: '/backend/menus' },
     { key: 'media', label: 'Media', to: '/backend/media' },
     { key: 'users', label: 'Users', to: '/backend/users' },
     { key: 'theme', label: 'Theme', to: '/backend/theme' },

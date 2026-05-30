@@ -126,7 +126,15 @@
             </label>
 
             <div class="theme-backend-actions">
-              <button type="submit" class="theme-form-submit" :disabled="isSaving">
+              <button
+                type="button"
+                class="theme-form-submit theme-form-submit-warning"
+                :disabled="isSaving || isDeleting"
+                @click="deleteMediaItem"
+              >
+                {{ isDeleting ? '삭제 중...' : '삭제' }}
+              </button>
+              <button type="submit" class="theme-form-submit" :disabled="isSaving || isDeleting">
                 {{ isSaving ? '저장 중...' : '저장' }}
               </button>
             </div>
@@ -199,6 +207,7 @@ const saveIsError = ref(false)
 const isUploading = ref(false)
 const uploadError = ref('')
 const isSaving = ref(false)
+const isDeleting = ref(false)
 
 const { data: mediaData, pending: isLoading } = await useFetch<{ items: ApiMediaItem[] }>(
   `${apiBase}/api/admin/media`,
@@ -285,6 +294,30 @@ function openDetail(item: MediaItem) {
 function closeDetail() {
   activeMedia.value = null
   saveMessage.value = ''
+}
+
+async function deleteMediaItem() {
+  if (!activeMedia.value || isDeleting.value || isSaving.value) return
+  if (!window.confirm(`'${activeMedia.value.title || activeMedia.value.filename}' 항목을 삭제할까요?`)) return
+
+  const targetId = activeMedia.value.id
+  isDeleting.value = true
+  saveMessage.value = ''
+  saveIsError.value = false
+
+  try {
+    await $fetch(`${apiBase}/api/admin/media/${targetId}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    })
+    mediaItems.value = mediaItems.value.filter(m => m.id !== targetId)
+    closeDetail()
+  } catch {
+    saveIsError.value = true
+    saveMessage.value = '삭제 실패'
+  } finally {
+    isDeleting.value = false
+  }
 }
 
 async function saveMediaDetail() {

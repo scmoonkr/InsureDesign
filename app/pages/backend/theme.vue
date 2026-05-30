@@ -30,20 +30,25 @@
             v-for="(def, key) in themeList"
             :key="key"
             :class="['theme-backend-theme-card', { active: key === activeThemeName }]"
+            role="button"
+            tabindex="0"
+            @click="openPreview(String(key))"
+            @keydown.enter.prevent="openPreview(String(key))"
+            @keydown.space.prevent="openPreview(String(key))"
           >
             <div class="theme-backend-theme-info">
               <strong>{{ def.label }}</strong>
               <code class="theme-backend-theme-name">{{ key }}</code>
               <p>{{ def.description }}</p>
             </div>
-            <div class="theme-backend-theme-footer">
+            <div class="theme-backend-theme-footer" @click.stop>
               <span v-if="key === activeThemeName" class="theme-backend-theme-badge">Active</span>
               <button
                 v-else
                 type="button"
                 class="theme-form-submit"
                 :disabled="isActivating"
-                @click="activateTheme(key)"
+                @click="activateTheme(String(key))"
               >
                 Activate
               </button>
@@ -52,12 +57,26 @@
         </section>
       </main>
     </div>
+
+    <div v-if="previewKey" class="theme-backend-user-modal" @click="closePreview">
+      <aside class="theme-backend-user-drawer theme-backend-theme-drawer" @click.stop>
+        <header class="theme-backend-user-drawer-head">
+          <div>
+            <strong>{{ themeList[previewKey]?.label }} Foundation</strong>
+            <code class="theme-backend-theme-name">{{ previewKey }}</code>
+          </div>
+          <button type="button" class="theme-backend-close" aria-label="Close preview" @click="closePreview">×</button>
+        </header>
+        <ThemeFoundationPreview />
+      </aside>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import DefaultThemeTopbar from '~/components/public/DefaultThemeTopbar.vue'
 import BackendSidebar from '~/components/admin/BackendSidebar.vue'
+import ThemeFoundationPreview from '~/components/admin/ThemeFoundationPreview.vue'
 import { themes } from '~/themes'
 
 definePageMeta({
@@ -75,6 +94,15 @@ const isActivating = ref(false)
 const message = ref('')
 const isError = ref(false)
 const isSidebarOpen = ref(false)
+const previewKey = ref<string>('')
+
+function openPreview(key: string) {
+  previewKey.value = key
+}
+
+function closePreview() {
+  previewKey.value = ''
+}
 
 async function activateTheme(name: string) {
   isActivating.value = true

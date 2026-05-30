@@ -3,7 +3,11 @@ import { getUserById } from './auth-service.mjs'
 import { getSiteByDomain } from './sites-service.mjs'
 import { getConfig } from './config.mjs'
 
-export const ROLE_LEVELS = { viewer: 1, writer: 2, manager: 3, admin: 4, super: 5 }
+// Role hierarchy: member < manager < admin < super
+// super is a system-only bypass for cross-site operators (sites CRUD, bootstrap).
+// Only member/manager/admin are surfaced in the user role UI.
+export const ROLE_LEVELS = { member: 1, manager: 2, admin: 3, super: 4 }
+export const USER_ROLES = ['member', 'manager', 'admin']
 
 // Check if user has minimum role for a given siteId.
 // super role bypasses all siteId checks.

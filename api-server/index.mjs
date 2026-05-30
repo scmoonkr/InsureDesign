@@ -4,14 +4,19 @@ import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { URL } from 'node:url'
+import { ObjectId } from 'mongodb'
+import { getMongoDb } from './mongo.mjs'
 import { clearAuthSession, createOAuthState, getAuthSession, setAuthSession, verifyOAuthState } from './auth-session.mjs'
 import { getConfig, loadEnv } from './config.mjs'
 import { deleteUserById, getUserById, listUsers, updateUserProfile, upsertSocialUser } from './auth-service.mjs'
-import { listMedia, createMedia, updateMediaMeta } from './media-service.mjs'
+import { listMedia, createMedia, updateMediaMeta, deleteMedia, getMediaByIds } from './media-service.mjs'
 import { getSiteConfig, updateSiteTheme, getSiteSettings, updateSiteSettings } from './settings-service.mjs'
 import { listSites, getSiteById, getSiteByDomain, createSite, updateSite, addDomain, removeDomain } from './sites-service.mjs'
 import { resolvePublicSiteId, getAdminSiteId, checkAdmin, checkSession, isSuperUser } from './middleware.mjs'
-import { listContents, getContentById, createContent, updateContent, deleteContent, listPublicContents, getPublicContentBySlug, titleToSlug } from './contents-service.mjs'
+import { listContents, getContentById, createContent, updateContent, deleteContent, listPublicContents, getPublicContentBySlug, titleToSlug, collectImageIds, previewMarkdown } from './contents-service.mjs'
+import { listCategories, createCategory, updateCategory, deleteCategory, getCategoryBySlug } from './categories-service.mjs'
+import { listTags, findOrCreateTagsByNames, getTagBySlug } from './tags-service.mjs'
+import { listMenus, createMenu, updateMenu, deleteMenu } from './menus-service.mjs'
 
 loadEnv()
 
@@ -203,6 +208,27 @@ function validateProfileInput(input) {
   return {
     value,
   }
+}
+
+// /api/auth/me — session payload + fresh roles from DB so the client can gate UI.
+async function handleAuthMe(req, res) {
+  const session = getAuthSession(req)
+  if (!session) {
+    sendJson(req, res, 200, { user: null })
+    return
+  }
+  const user = await getUserById(session.id)
+  if (!user || user.status !== 'active') {
+    sendJson(req, res, 200, { user: null })
+    return
+  }
+  sendJson(req, res, 200, {
+    user: {
+      ...session,
+      roles: user.roles || [],
+      status: user.status,
+    },
+  })
 }
 
 async function handleGetMyProfile(req, res) {
@@ -576,6 +602,242 @@ async function handleUpdateMedia(req, res, mediaId) {
   })
 }
 
+async function handleDeleteMedia(req, res, mediaId, url) {
+  const session = getAuthSession(req)
+  if (!session) {
+    sendError(req, res, 401, 'Unauthorized')
+    return
+  }
+
+  const siteId = getAdminSiteId(req, url)
+  const deleted = await deleteMedia(mediaId, siteId, session.id)
+  if (!deleted) {
+    sendError(req, res, 404, 'Media not found')
+    return
+  }
+
+  sendJson(req, res, 200, { ok: true })
+}
+
+// ── Categories ───────────────────────────────────────────────────────────────
+
+async function handleListCategories(req, res, url) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+
+  const siteId = getAdminSiteId(req, url)
+  const items = await listCategories(siteId)
+  sendJson(req, res, 200, { items })
+}
+
+function validateCategoryName(name) {
+  const trimmed = typeof name === 'string' ? name.trim() : ''
+  if (!trimmed || trimmed.length > 60) return null
+  return trimmed
+}
+
+async function handleCreateCategory(req, res, url) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+
+  const input = await readJsonBody(req)
+  const name = validateCategoryName(input.name)
+  if (!name) { sendError(req, res, 400, 'name must be 1-60 characters'); return }
+
+  const siteId = getAdminSiteId(req, url)
+  try {
+    const item = await createCategory({
+      siteId,
+      name,
+      slug: input.slug,
+      parentId: input.parentId || null,
+      order: input.order,
+    }, session.id)
+    sendJson(req, res, 201, { item })
+  } catch (err) {
+    sendError(req, res, 400, err instanceof Error ? err.message : 'Failed to create category')
+  }
+}
+
+async function handleUpdateCategory(req, res, categoryId, url) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+
+  const input = await readJsonBody(req)
+  const siteId = getAdminSiteId(req, url)
+
+  if (input.name !== undefined) {
+    const name = validateCategoryName(input.name)
+    if (!name) { sendError(req, res, 400, 'name must be 1-60 characters'); return }
+    input.name = name
+  }
+
+  try {
+    const item = await updateCategory(categoryId, siteId, input, session.id)
+    if (!item) { sendError(req, res, 404, 'Category not found'); return }
+    sendJson(req, res, 200, { item })
+  } catch (err) {
+    sendError(req, res, 400, err instanceof Error ? err.message : 'Failed to update category')
+  }
+}
+
+async function handleListTags(req, res, url) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+  const siteId = getAdminSiteId(req, url)
+  const items = await listTags(siteId)
+  sendJson(req, res, 200, { items })
+}
+
+// ── Menus ────────────────────────────────────────────────────────────────────
+
+// Public: resolve a menu by location to ready-to-render NavItem tree.
+// Drops draft/deleted references silently so the public nav stays clean.
+async function handlePublicMenu(req, res, location) {
+  const siteId = await resolvePublicSiteId(req)
+  const db = await getMongoDb()
+  const doc = await db.collection('menus').findOne({
+    siteId, location, isDeleted: { $ne: true },
+  })
+  if (!doc) { sendJson(req, res, 200, { menu: null }); return }
+
+  // Collect contentIds + categoryIds across the tree for batch lookup
+  const contentIds = new Set()
+  const categoryIds = new Set()
+  const walk = (arr) => {
+    for (const it of arr || []) {
+      if ((it.type === 'page' || it.type === 'post') && it.contentId) contentIds.add(String(it.contentId))
+      else if (it.type === 'category' && it.categoryId) categoryIds.add(String(it.categoryId))
+      if (it.children?.length) walk(it.children)
+    }
+  }
+  walk(doc.items)
+
+  const [contentDocs, categoryDocs] = await Promise.all([
+    contentIds.size
+      ? db.collection('contents').find(
+          {
+            _id: { $in: [...contentIds].map(id => new ObjectId(id)) },
+            siteId,
+            isDeleted: { $ne: true },
+            status: 'published',
+            visibility: 'public',
+          },
+          { projection: { slug: 1, contentType: 1 } },
+        ).toArray()
+      : [],
+    categoryIds.size
+      ? db.collection('categories').find(
+          { _id: { $in: [...categoryIds].map(id => new ObjectId(id)) }, siteId, isDeleted: { $ne: true } },
+          { projection: { slug: 1 } },
+        ).toArray()
+      : [],
+  ])
+
+  const contentMap = new Map(contentDocs.map(c => [String(c._id), c]))
+  const categoryMap = new Map(categoryDocs.map(c => [String(c._id), c]))
+
+  const resolveTree = (arr) => {
+    const out = []
+    for (const it of arr || []) {
+      if (it.isVisible === false) continue
+      let url = ''
+      let ok = false
+      if (it.type === 'page' || it.type === 'post') {
+        const c = contentMap.get(String(it.contentId))
+        if (c) { url = `/${c.contentType}/${c.slug}`; ok = true }
+      } else if (it.type === 'category') {
+        const c = categoryMap.get(String(it.categoryId))
+        if (c) { url = `/categories/${c.slug}`; ok = true }
+      } else if (it.type === 'url') {
+        // empty URL is allowed — renders as non-clickable 대표메뉴 (section header)
+        url = it.url || ''
+        ok = true
+      }
+      if (!ok) continue
+      out.push({
+        id: it.id,
+        title: it.title,
+        url,
+        target: it.target || 'self',
+        children: resolveTree(it.children),
+      })
+    }
+    return out
+  }
+
+  sendJson(req, res, 200, {
+    menu: {
+      id: String(doc._id),
+      name: doc.name,
+      location: doc.location,
+      items: resolveTree(doc.items),
+    },
+  })
+}
+
+async function handleListMenus(req, res, url) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+  const siteId = getAdminSiteId(req, url)
+  const items = await listMenus(siteId)
+  sendJson(req, res, 200, { items })
+}
+
+async function handleCreateMenu(req, res, url) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+  const input = await readJsonBody(req)
+  if (!input.name || typeof input.name !== 'string') {
+    sendError(req, res, 400, 'name is required'); return
+  }
+  const siteId = getAdminSiteId(req, url)
+  const menu = await createMenu({
+    siteId, name: input.name, location: input.location, items: input.items,
+  }, session.id)
+  sendJson(req, res, 201, { menu })
+}
+
+async function handleUpdateMenu(req, res, menuId, url) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+  const input = await readJsonBody(req)
+  const siteId = getAdminSiteId(req, url)
+  const menu = await updateMenu(menuId, siteId, input, session.id)
+  if (!menu) { sendError(req, res, 404, 'Menu not found'); return }
+  sendJson(req, res, 200, { menu })
+}
+
+async function handleDeleteMenu(req, res, menuId, url) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+  const siteId = getAdminSiteId(req, url)
+  const deleted = await deleteMenu(menuId, siteId, session.id)
+  if (!deleted) { sendError(req, res, 404, 'Menu not found'); return }
+  sendJson(req, res, 200, { ok: true })
+}
+
+async function handleDeleteCategory(req, res, categoryId, url) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+
+  const siteId = getAdminSiteId(req, url)
+  const result = await deleteCategory(categoryId, siteId, session.id)
+  if (!result.ok) {
+    if (result.reason === 'has-children') {
+      sendError(req, res, 409, '하위 카테고리가 있어 삭제할 수 없습니다.')
+      return
+    }
+    if (result.reason === 'has-contents') {
+      sendError(req, res, 409, '연결된 콘텐츠가 있어 삭제할 수 없습니다.')
+      return
+    }
+    sendError(req, res, 404, 'Category not found')
+    return
+  }
+  sendJson(req, res, 200, { ok: true })
+}
+
 // ── Sites CRUD ───────────────────────────────────────────────────────────────
 
 async function handleListSites(req, res) {
@@ -717,7 +979,7 @@ function validateContentInput(input) {
 // Admin: list contents for a siteId
 async function handleListContents(req, res, url) {
   const siteId = getAdminSiteId(req, url)
-  const auth = await checkAdmin(req, siteId, 'viewer')
+  const auth = await checkAdmin(req, siteId, 'manager')
   if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
 
   const { items, total } = await listContents(siteId, {
@@ -732,21 +994,58 @@ async function handleListContents(req, res, url) {
 // Admin: create content
 async function handleCreateContent(req, res, url) {
   const siteId = getAdminSiteId(req, url)
-  const auth = await checkAdmin(req, siteId, 'writer')
+  const auth = await checkAdmin(req, siteId, 'manager')
   if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
 
   const input = await readJsonBody(req)
   const validation = validateContentInput(input)
   if (validation.error) { sendError(req, res, 400, validation.error); return }
 
-  const content = await createContent({ ...validation.value, siteId }, auth.user.id)
-  sendJson(req, res, 201, { content })
+  const tagIds = await findOrCreateTagsByNames(siteId, input.tagNames, auth.user.id)
+  const categoryIds = Array.isArray(input.categoryIds) ? input.categoryIds : []
+  const meta = { ...(input.meta && typeof input.meta === 'object' ? input.meta : {}) }
+  if (Object.hasOwn(input, 'featured')) meta.featured = !!input.featured
+
+  try {
+    const content = await createContent(
+      { ...validation.value, siteId, categoryIds, tagIds, meta, thumbnailImageId: input.thumbnailImageId || null },
+      auth.user.id,
+    )
+    sendJson(req, res, 201, { content })
+  } catch (err) {
+    if (err && err.blockErrors) { sendError(req, res, 400, err.message); return }
+    throw err
+  }
+}
+
+// Admin: preview markdown — parse + validate + return blocks + mediaMap (no save)
+async function handlePreviewContent(req, res, url) {
+  const siteId = getAdminSiteId(req, url)
+  const auth = await checkAdmin(req, siteId, 'manager')
+  if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
+
+  const input = await readJsonBody(req)
+  const result = await previewMarkdown(input.markdown || '', siteId)
+
+  // Apply absolute URL prefix so cross-origin browsers can load images
+  const { apiBase } = getConfig()
+  for (const id of Object.keys(result.mediaMap)) {
+    const item = result.mediaMap[id]
+    if (item?.paths?.original?.startsWith('/uploads/')) {
+      result.mediaMap[id] = {
+        ...item,
+        paths: { ...item.paths, original: `${apiBase}${item.paths.original}` },
+      }
+    }
+  }
+
+  sendJson(req, res, 200, result)
 }
 
 // Admin: get single content
 async function handleGetContent(req, res, contentId, url) {
   const siteId = getAdminSiteId(req, url)
-  const auth = await checkAdmin(req, siteId, 'viewer')
+  const auth = await checkAdmin(req, siteId, 'manager')
   if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
 
   const content = await getContentById(siteId, contentId)
@@ -758,14 +1057,31 @@ async function handleGetContent(req, res, contentId, url) {
 // Admin: update content
 async function handleUpdateContent(req, res, contentId, url) {
   const siteId = getAdminSiteId(req, url)
-  const auth = await checkAdmin(req, siteId, 'writer')
+  const auth = await checkAdmin(req, siteId, 'manager')
   if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
 
   const input = await readJsonBody(req)
-  const content = await updateContent(contentId, siteId, input, auth.user.id)
-  if (!content) { sendError(req, res, 404, 'Content not found'); return }
+  const fields = { ...input }
 
-  sendJson(req, res, 200, { content })
+  if (Array.isArray(input.tagNames)) {
+    fields.tagIds = await findOrCreateTagsByNames(siteId, input.tagNames, auth.user.id)
+    delete fields.tagNames
+  }
+
+  if (Object.hasOwn(input, 'featured')) {
+    const base = (input.meta && typeof input.meta === 'object') ? input.meta : {}
+    fields.meta = { ...base, featured: !!input.featured }
+    delete fields.featured
+  }
+
+  try {
+    const content = await updateContent(contentId, siteId, fields, auth.user.id)
+    if (!content) { sendError(req, res, 404, 'Content not found'); return }
+    sendJson(req, res, 200, { content })
+  } catch (err) {
+    if (err && err.blockErrors) { sendError(req, res, 400, err.message); return }
+    throw err
+  }
 }
 
 // Admin: delete content (soft)
@@ -780,6 +1096,167 @@ async function handleDeleteContent(req, res, contentId, url) {
   sendJson(req, res, 200, { ok: true })
 }
 
+// Public: list published contents in a category — returns category + items + maps in one round trip
+async function handlePublicCategoryPage(req, res, url, slug) {
+  const siteId = await resolvePublicSiteId(req)
+  const category = await getCategoryBySlug(siteId, slug)
+  if (!category) { sendError(req, res, 404, 'Category not found'); return }
+
+  const db = await getMongoDb()
+  const wantType = url.searchParams.get('type')
+  const limit = Math.min(Number(url.searchParams.get('limit')) || 20, 50)
+  const skip = Number(url.searchParams.get('skip')) || 0
+
+  const filter = {
+    siteId,
+    status: 'published',
+    visibility: 'public',
+    isDeleted: { $ne: true },
+    categoryIds: new ObjectId(category.id),
+  }
+  if (wantType) filter.contentType = wantType
+
+  const [docs, total] = await Promise.all([
+    db.collection('contents').find(filter, {
+      projection: {
+        title: 1, slug: 1, summary: 1, contentType: 1, publishedAt: 1, updatedAt: 1,
+        thumbnailImageId: 1, authorId: 1, meta: 1,
+      },
+    })
+      .sort({ publishedAt: -1, updatedAt: -1 })
+      .skip(skip).limit(limit)
+      .toArray(),
+    db.collection('contents').countDocuments(filter),
+  ])
+
+  // Batch lookup thumbnails + authors
+  const thumbIds = new Set()
+  const authorIds = new Set()
+  for (const d of docs) {
+    if (d.thumbnailImageId) thumbIds.add(String(d.thumbnailImageId))
+    if (d.authorId) authorIds.add(String(d.authorId))
+  }
+
+  const mediaMap = thumbIds.size ? await getMediaByIds(siteId, [...thumbIds]) : {}
+  const authorMap = {}
+  if (authorIds.size) {
+    const authors = await db.collection('users').find(
+      { _id: { $in: [...authorIds].map(id => new ObjectId(id)) }, isDeleted: { $ne: true } },
+      { projection: { name: 1, nickname: 1, avatarUrl: 1 } },
+    ).toArray()
+    for (const u of authors) {
+      authorMap[String(u._id)] = {
+        id: String(u._id),
+        name: u.nickname || u.name || '',
+        avatarUrl: u.avatarUrl || '',
+      }
+    }
+  }
+
+  const { apiBase } = getConfig()
+  for (const id of Object.keys(mediaMap)) {
+    const item = mediaMap[id]
+    if (item?.paths?.original?.startsWith('/uploads/')) {
+      mediaMap[id] = { ...item, paths: { ...item.paths, original: `${apiBase}${item.paths.original}` } }
+    }
+  }
+
+  const items = docs.map(d => ({
+    id: String(d._id),
+    title: d.title,
+    slug: d.slug,
+    summary: d.summary || '',
+    contentType: d.contentType,
+    publishedAt: d.publishedAt,
+    updatedAt: d.updatedAt,
+    thumbnailImageId: d.thumbnailImageId ? String(d.thumbnailImageId) : null,
+    authorId: d.authorId ? String(d.authorId) : null,
+    meta: d.meta || {},
+  }))
+
+  sendJson(req, res, 200, { category, items, total, mediaMap, authorMap })
+}
+
+// Public: list published contents tagged with a given slug — same shape as the category page.
+async function handlePublicTagPage(req, res, url, slug) {
+  const siteId = await resolvePublicSiteId(req)
+  const tag = await getTagBySlug(siteId, slug)
+  if (!tag) { sendError(req, res, 404, 'Tag not found'); return }
+
+  const db = await getMongoDb()
+  const wantType = url.searchParams.get('type')
+  const limit = Math.min(Number(url.searchParams.get('limit')) || 20, 50)
+  const skip = Number(url.searchParams.get('skip')) || 0
+
+  const filter = {
+    siteId,
+    status: 'published',
+    visibility: 'public',
+    isDeleted: { $ne: true },
+    tagIds: new ObjectId(tag.id),
+  }
+  if (wantType) filter.contentType = wantType
+
+  const [docs, total] = await Promise.all([
+    db.collection('contents').find(filter, {
+      projection: {
+        title: 1, slug: 1, summary: 1, contentType: 1, publishedAt: 1, updatedAt: 1,
+        thumbnailImageId: 1, authorId: 1, meta: 1,
+      },
+    })
+      .sort({ publishedAt: -1, updatedAt: -1 })
+      .skip(skip).limit(limit)
+      .toArray(),
+    db.collection('contents').countDocuments(filter),
+  ])
+
+  const thumbIds = new Set()
+  const authorIds = new Set()
+  for (const d of docs) {
+    if (d.thumbnailImageId) thumbIds.add(String(d.thumbnailImageId))
+    if (d.authorId) authorIds.add(String(d.authorId))
+  }
+
+  const mediaMap = thumbIds.size ? await getMediaByIds(siteId, [...thumbIds]) : {}
+  const authorMap = {}
+  if (authorIds.size) {
+    const authors = await db.collection('users').find(
+      { _id: { $in: [...authorIds].map(id => new ObjectId(id)) }, isDeleted: { $ne: true } },
+      { projection: { name: 1, nickname: 1, avatarUrl: 1 } },
+    ).toArray()
+    for (const u of authors) {
+      authorMap[String(u._id)] = {
+        id: String(u._id),
+        name: u.nickname || u.name || '',
+        avatarUrl: u.avatarUrl || '',
+      }
+    }
+  }
+
+  const { apiBase } = getConfig()
+  for (const id of Object.keys(mediaMap)) {
+    const item = mediaMap[id]
+    if (item?.paths?.original?.startsWith('/uploads/')) {
+      mediaMap[id] = { ...item, paths: { ...item.paths, original: `${apiBase}${item.paths.original}` } }
+    }
+  }
+
+  const items = docs.map(d => ({
+    id: String(d._id),
+    title: d.title,
+    slug: d.slug,
+    summary: d.summary || '',
+    contentType: d.contentType,
+    publishedAt: d.publishedAt,
+    updatedAt: d.updatedAt,
+    thumbnailImageId: d.thumbnailImageId ? String(d.thumbnailImageId) : null,
+    authorId: d.authorId ? String(d.authorId) : null,
+    meta: d.meta || {},
+  }))
+
+  sendJson(req, res, 200, { tag, items, total, mediaMap, authorMap })
+}
+
 // Public: list published contents
 async function handlePublicListContents(req, res, url) {
   const siteId = await resolvePublicSiteId(req)
@@ -792,12 +1269,72 @@ async function handlePublicListContents(req, res, url) {
 }
 
 // Public: get single published content by slug
-async function handlePublicGetContent(req, res, slug) {
+async function handlePublicGetContent(req, res, slug, url) {
   const siteId = await resolvePublicSiteId(req)
   const content = await getPublicContentBySlug(siteId, slug)
   if (!content) { sendError(req, res, 404, 'Not found'); return }
 
-  sendJson(req, res, 200, { content })
+  const wantType = url?.searchParams?.get('type')
+  if (wantType && content.contentType !== wantType) {
+    sendError(req, res, 404, 'Not found')
+    return
+  }
+
+  // Bundle every media doc referenced by the article — image blocks AND featured image.
+  const ids = new Set(collectImageIds(content.blocks || []))
+  if (content.thumbnailImageId) ids.add(String(content.thumbnailImageId))
+  const mediaMap = ids.size ? await getMediaByIds(siteId, [...ids]) : {}
+
+  // Resolve category / tag display names so the page doesn't need extra round trips.
+  const db = await getMongoDb()
+  const catObjectIds = (content.categoryIds || [])
+    .filter(id => ObjectId.isValid(id) || id instanceof ObjectId)
+    .map(id => id instanceof ObjectId ? id : new ObjectId(id))
+  const tagObjectIds = (content.tagIds || [])
+    .filter(id => ObjectId.isValid(id) || id instanceof ObjectId)
+    .map(id => id instanceof ObjectId ? id : new ObjectId(id))
+
+  const [catDocs, tagDocs] = await Promise.all([
+    catObjectIds.length
+      ? db.collection('categories').find({ _id: { $in: catObjectIds }, siteId, isDeleted: { $ne: true } }).toArray()
+      : [],
+    tagObjectIds.length
+      ? db.collection('tags').find({ _id: { $in: tagObjectIds }, siteId, isDeleted: { $ne: true } }).toArray()
+      : [],
+  ])
+
+  const categoryLabels = catDocs.map(d => ({ id: String(d._id), name: d.name, slug: d.slug }))
+  const tagLabels = tagDocs.map(d => ({ id: String(d._id), name: d.name, slug: d.slug }))
+
+  // Resolve author display info (avoid leaking email/provider details)
+  let author = null
+  if (content.authorId && ObjectId.isValid(content.authorId)) {
+    const u = await db.collection('users').findOne(
+      { _id: new ObjectId(content.authorId), isDeleted: { $ne: true } },
+      { projection: { name: 1, nickname: 1, avatarUrl: 1 } },
+    )
+    if (u) {
+      author = {
+        id: String(u._id),
+        name: u.nickname || u.name || '',
+        avatarUrl: u.avatarUrl || '',
+      }
+    }
+  }
+
+  // Rewrite local /uploads/... paths to absolute API base for cross-origin browsers.
+  const { apiBase } = getConfig()
+  for (const id of Object.keys(mediaMap)) {
+    const item = mediaMap[id]
+    if (item?.paths?.original && item.paths.original.startsWith('/uploads/')) {
+      mediaMap[id] = {
+        ...item,
+        paths: { ...item.paths, original: `${apiBase}${item.paths.original}` },
+      }
+    }
+  }
+
+  sendJson(req, res, 200, { content, mediaMap, categoryLabels, tagLabels, author })
 }
 
 // ── Site config / Settings ───────────────────────────────────────────────────
@@ -994,7 +1531,7 @@ async function handleRequest(req, res) {
 
   try {
     if (req.method === 'GET' && url.pathname === '/api/auth/me') {
-      sendJson(req, res, 200, { user: getAuthSession(req) })
+      await handleAuthMe(req, res)
       return
     }
 
@@ -1058,6 +1595,11 @@ async function handleRequest(req, res) {
       return
     }
 
+    if (req.method === 'POST' && url.pathname === '/api/admin/contents/preview') {
+      await handlePreviewContent(req, res, url)
+      return
+    }
+
     const adminContentMatch = url.pathname.match(/^\/api\/admin\/contents\/([^/]+)$/)
     if (adminContentMatch) {
       if (req.method === 'GET') { await handleGetContent(req, res, adminContentMatch[1], url); return }
@@ -1073,7 +1615,25 @@ async function handleRequest(req, res) {
 
     const publicContentSlugMatch = url.pathname.match(/^\/api\/public\/contents\/([^/]+)$/)
     if (req.method === 'GET' && publicContentSlugMatch) {
-      await handlePublicGetContent(req, res, decodeURIComponent(publicContentSlugMatch[1]))
+      await handlePublicGetContent(req, res, decodeURIComponent(publicContentSlugMatch[1]), url)
+      return
+    }
+
+    const publicCategorySlugMatch = url.pathname.match(/^\/api\/public\/categories\/([^/]+)$/)
+    if (req.method === 'GET' && publicCategorySlugMatch) {
+      await handlePublicCategoryPage(req, res, url, decodeURIComponent(publicCategorySlugMatch[1]))
+      return
+    }
+
+    const publicTagSlugMatch = url.pathname.match(/^\/api\/public\/tags\/([^/]+)$/)
+    if (req.method === 'GET' && publicTagSlugMatch) {
+      await handlePublicTagPage(req, res, url, decodeURIComponent(publicTagSlugMatch[1]))
+      return
+    }
+
+    const publicMenuMatch = url.pathname.match(/^\/api\/public\/menus\/([^/]+)$/)
+    if (req.method === 'GET' && publicMenuMatch) {
+      await handlePublicMenu(req, res, decodeURIComponent(publicMenuMatch[1]))
       return
     }
 
@@ -1141,6 +1701,46 @@ async function handleRequest(req, res) {
     if (adminMediaMatch && req.method === 'PUT') {
       await handleUpdateMedia(req, res, adminMediaMatch[1])
       return
+    }
+    if (adminMediaMatch && req.method === 'DELETE') {
+      await handleDeleteMedia(req, res, adminMediaMatch[1], url)
+      return
+    }
+
+    // ── Admin: Categories ─────────────────────────────────────────────────────
+    if (req.method === 'GET' && url.pathname === '/api/admin/categories') {
+      await handleListCategories(req, res, url)
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/api/admin/categories') {
+      await handleCreateCategory(req, res, url)
+      return
+    }
+    const adminCategoryMatch = url.pathname.match(/^\/api\/admin\/categories\/([^/]+)$/)
+    if (adminCategoryMatch) {
+      if (req.method === 'PUT') { await handleUpdateCategory(req, res, adminCategoryMatch[1], url); return }
+      if (req.method === 'DELETE') { await handleDeleteCategory(req, res, adminCategoryMatch[1], url); return }
+    }
+
+    // ── Admin: Tags ───────────────────────────────────────────────────────────
+    if (req.method === 'GET' && url.pathname === '/api/admin/tags') {
+      await handleListTags(req, res, url)
+      return
+    }
+
+    // ── Admin: Menus ──────────────────────────────────────────────────────────
+    if (req.method === 'GET' && url.pathname === '/api/admin/menus') {
+      await handleListMenus(req, res, url)
+      return
+    }
+    if (req.method === 'POST' && url.pathname === '/api/admin/menus') {
+      await handleCreateMenu(req, res, url)
+      return
+    }
+    const adminMenuMatch = url.pathname.match(/^\/api\/admin\/menus\/([^/]+)$/)
+    if (adminMenuMatch) {
+      if (req.method === 'PUT') { await handleUpdateMenu(req, res, adminMenuMatch[1], url); return }
+      if (req.method === 'DELETE') { await handleDeleteMenu(req, res, adminMenuMatch[1], url); return }
     }
 
     sendError(req, res, 404, 'Not found')

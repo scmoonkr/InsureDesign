@@ -79,12 +79,7 @@ definePageMeta({
   layout: 'default',
 })
 
-const navItems = [
-  { label: 'The Index', to: '/' },
-  { label: 'The Errata', to: '/errata' },
-  { label: 'Backend', to: '/backend' },
-  { label: 'Admin', to: '/admin' },
-]
+const navItems = useSiteNav('header')
 
 type ProfileUser = {
   id: string

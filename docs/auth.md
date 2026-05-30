@@ -23,13 +23,16 @@ OAuth 사용자는 `provider + providerId` 조합으로 식별한다.
 
 ## Roles
 
+User-facing 역할 3종 + 시스템 전용 1종:
+
 ```txt
-super
-admin
-manager
-writer
-viewer
+member    공개 콘텐츠 + 본인 프로필
+manager   /backend/* 전체 접근, 콘텐츠/미디어/카테고리/태그 CRUD
+admin     manager 전체 + 사용자 role 부여/회수, 사이트 설정
+super     (시스템 전용) 모든 siteId 우회, sites CRUD
 ```
+
+`super`는 UI에서 노출하지 않으며 시스템 부트스트랩/멀티사이트 운영자에게만 부여합니다.
 
 ## Site Scoped Permission
 
@@ -46,15 +49,17 @@ users {
 }
 ```
 
-## Role Meaning
+## Backend Access Policy
 
-```txt
-super   전체 사이트 관리
-admin   특정 siteId 전체 관리
-manager 콘텐츠/메뉴/이미지 운영 관리
-writer  콘텐츠 작성
-viewer  읽기 전용 접근
-```
+`/backend/*` 모든 페이지는 **manager 이상**(super 포함)만 접근 가능합니다.
+
+- 클라이언트: `app/middleware/backend-auth.global.ts`가 `/api/auth/me`로 role 확인 후 미달이면 alert + 홈으로 redirect.
+- 서버: admin API 핸들러는 `checkAdmin(req, siteId, 'manager')`로 동일 정책을 강제합니다.
+
+## New User Default
+
+신규 OAuth 가입자는 `[{ siteId: DEFAULT_SITE_ID, role: 'member' }]`로 생성됩니다.
+backend 접근이 필요한 사용자는 admin이 `/backend/users`에서 role을 manager 이상으로 승격해야 합니다.
 
 ## Permission Detail
 
