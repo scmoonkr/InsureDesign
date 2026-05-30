@@ -27,6 +27,7 @@ function renderNode(n) {
     case 'map':       return renderMap(n.props)
     case 'timeline':  return renderTimeline(n.props)
     case 'row':       return renderRow(n.props)
+    case 'textCard':  return renderTextCard(n.props)
     default:
       return `<div class="block-placeholder" data-block-type="${esc(n.type)}">` +
         `<em>[${esc(n.type)} block — renderer not yet implemented]</em>` +
@@ -53,6 +54,20 @@ function renderRow(props) {
 function renderTitleBanner(props) {
   const title = esc(props.title || '')
   const subtitle = props.subtitle ? `<p class="block-title-subtitle">${esc(props.subtitle)}</p>` : ''
+  const description = props.content
+    ? `<div class="block-title-description">${renderInlineMarkdown(props.content)}</div>`
+    : ''
+
+  // Optional CTA — rendered only when buttonText is set; URL is sanitized like the standalone button block.
+  let button = ''
+  if (props.buttonText) {
+    const btnStyle = ['primary', 'secondary', 'warning'].includes(props.buttonStyle) ? props.buttonStyle : 'primary'
+    const btnUrl = isSafeUrl(props.buttonUrl) ? props.buttonUrl : '#'
+    const external = /^https?:/i.test(btnUrl)
+    const btnAttrs = external ? ' target="_blank" rel="noopener"' : ''
+    button = `<a class="block-title-cta block-button block-button-${btnStyle}" href="${esc(btnUrl)}"${btnAttrs}>${esc(props.buttonText)}</a>`
+  }
+
   const align = ['left', 'center', 'right'].includes(props.align) ? props.align : 'center'
   const height = ['small', 'medium', 'large'].includes(props.height) ? props.height : 'medium'
   const textColor = props.textColor === 'light' ? 'light' : 'dark'
@@ -67,6 +82,8 @@ function renderTitleBanner(props) {
     `<div class="block-title-inner">` +
     `<h2 class="block-title-title">${title}</h2>` +
     `${subtitle}` +
+    `${description}` +
+    `${button}` +
     `</div></section>`
 }
 
@@ -145,6 +162,32 @@ function renderImageGrid(props) {
       `</figure>`
   }).filter(Boolean).join('')
   return `<div class="block-imagegrid block-imagegrid-cols-${cols} block-imagegrid-gap-${gap}">${cells}</div>`
+}
+
+function renderTextCard(props) {
+  const cols = ['2', '3', '4'].includes(props.columns) ? props.columns : '3'
+  const gap = ['small', 'medium', 'large'].includes(props.gap) ? props.gap : 'medium'
+  const items = Array.isArray(props.items) ? props.items : []
+  const blockTextColor = props.textColor === 'light' ? 'light' : 'dark'
+  const blockBg = props.backgroundColor || ''
+
+  const cells = items.map(it => {
+    if (!it || typeof it !== 'object') return ''
+    const title = it.title ? `<h3 class="block-textcard-title">${esc(it.title)}</h3>` : ''
+    const desc = it.description ? `<div class="block-textcard-desc">${renderInlineMarkdown(it.description)}</div>` : ''
+    if (!title && !desc) return ''
+
+    // Per-card overrides take precedence over block-level defaults.
+    const cardBg = it.backgroundColor || blockBg
+    const cardTextColor = it.textColor === 'light' || it.textColor === 'dark'
+      ? it.textColor
+      : blockTextColor
+    const cardStyle = cardBg ? ` style="background-color:${esc(cardBg)}"` : ''
+    return `<article class="block-textcard-card block-textcard-text-${cardTextColor}"${cardStyle}>` +
+      `${title}${desc}</article>`
+  }).filter(Boolean).join('')
+
+  return `<div class="block-textcard block-textcard-cols-${cols} block-textcard-gap-${gap}">${cells}</div>`
 }
 
 function filenameFromUrl(url) {

@@ -2,7 +2,7 @@
   <div class="theme-default">
     <DefaultThemeTopbar title="Korean Swimming Registry" :items="navItems" />
 
-    <main :class="['public-content-shell', { 'public-content-shell-flush': isPage }]">
+    <main :class="['public-content-shell', { 'public-content-shell-flush': isPage && showEyebrow }]">
       <template v-if="content">
         <!-- Hero (only for non-pages — pages get a Title Banner-style header instead) -->
         <section v-if="heroUrl && !isPage" class="public-content-hero">
@@ -10,9 +10,10 @@
         </section>
 
         <article :class="['public-content', { 'with-hero': heroUrl && !isPage, 'is-page': isPage }]">
-          <!-- Pages: render the meta as a Title Banner block (title + excerpt as subtitle). -->
+          <!-- Pages: render the meta as a Title Banner block (title + excerpt as subtitle).
+               When the author disables the eyebrow toggle, hide the whole banner section. -->
           <section
-            v-if="isPage"
+            v-if="isPage && showEyebrow"
             :class="[
               'block-title',
               'public-content-page-banner',
@@ -28,8 +29,11 @@
             </div>
           </section>
 
-          <!-- Non-pages: original magazine-style meta card -->
-          <header v-else class="public-content-card">
+          <!-- Non-pages: magazine-style meta card with eyebrow + title + byline.
+               When the author disables the eyebrow toggle, hide the whole header
+               (and the summary line below it) so only the body blocks render —
+               useful for "homepage"-style posts where the body provides its own title. -->
+          <header v-else-if="showEyebrow" class="public-content-card">
             <p class="public-content-eyebrow">
               <template v-if="categoryLabels.length">
                 <template v-for="(c, i) in categoryLabels" :key="c.id">
@@ -47,8 +51,9 @@
             </p>
           </header>
 
-          <!-- summary is shown only for non-pages (pages already have it as subtitle in the banner) -->
-          <p v-if="!isPage && content.summary" class="public-content-summary">{{ content.summary }}</p>
+          <!-- summary is shown only for non-pages with eyebrow enabled
+               (pages already have it as subtitle in the banner) -->
+          <p v-if="!isPage && showEyebrow && content.summary" class="public-content-summary">{{ content.summary }}</p>
 
           <BlockRenderer :blocks="content.blocks || []" :media-map="mediaMap" />
 
@@ -89,6 +94,7 @@ type Content = {
   html?: string
   publishedAt?: string
   thumbnailImageId?: string | null
+  meta?: Record<string, unknown> & { showEyebrow?: boolean }
 }
 type MediaInfo = { paths?: { original?: string }; title?: string; alt?: string }
 type LabelRef = { id: string; name: string; slug: string }
@@ -129,6 +135,10 @@ const mediaMap = computed(() => data.value?.mediaMap ?? {})
 const categoryLabels = computed(() => data.value?.categoryLabels ?? [])
 const tagLabels = computed(() => data.value?.tagLabels ?? [])
 const author = computed(() => data.value?.author ?? null)
+
+// Show the eyebrow unless the author explicitly turned it off; missing meta
+// defaults to true so existing posts keep their eyebrow.
+const showEyebrow = computed(() => content.value?.meta?.showEyebrow !== false)
 
 const heroUrl = computed(() => {
   const id = content.value?.thumbnailImageId

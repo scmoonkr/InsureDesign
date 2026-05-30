@@ -47,6 +47,21 @@ export async function listTags(siteId) {
   return items.map(serializeTag)
 }
 
+// Resolve a list of tag _id values to { id, name, slug } records.
+// Returns only tags that exist + belong to siteId + are not deleted.
+export async function getTagsByIds(siteId, ids) {
+  if (!Array.isArray(ids) || !ids.length) return []
+  const db = await getMongoDb()
+  const objectIds = ids
+    .map(v => (v instanceof ObjectId ? v : (typeof v === 'string' && ObjectId.isValid(v) ? new ObjectId(v) : null)))
+    .filter(Boolean)
+  if (!objectIds.length) return []
+  const docs = await db.collection('tags')
+    .find({ siteId, _id: { $in: objectIds }, isDeleted: { $ne: true } })
+    .toArray()
+  return docs.map(serializeTag)
+}
+
 export async function findOrCreateTagsByNames(siteId, names, userId) {
   if (!Array.isArray(names) || !names.length) return []
   const db = await getMongoDb()

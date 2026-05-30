@@ -15,6 +15,12 @@ const CUSTOM_CHECKS = {
     }
     return null
   },
+  title(props) {
+    if (props.buttonText && !isSafeUrl(props.buttonUrl)) {
+      return `옵션 'buttonUrl'은 http(s)/mailto/tel 또는 / 로 시작하는 경로여야 합니다.`
+    }
+    return null
+  },
   youtube(props) {
     if (!extractYoutubeId(props.content)) {
       return `유효한 YouTube URL이 아닙니다.`

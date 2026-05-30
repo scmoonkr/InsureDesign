@@ -9,16 +9,20 @@ export const INITIAL_BLOCK_NAMES = [
   'gallery', 'imageGrid', 'slide', 'file', 'map',
   'timeline',
   'row',
+  'textCard',
 ]
 
 // Row layout tokens (mirrors the layout picker UI in BlockInsertModal).
 // Each token splits on '-' into a list of column weights; the number of weights
-// = the number of columns the row must contain.
+// = the number of columns the row must contain. Arranged to fit a 4×3 picker.
 export const ROW_LAYOUTS = [
   '1',
   '1-1', '1-2', '2-1',
   '1-1-1', '1-2-1', '2-1-1', '1-1-2',
   '1-1-1-1',
+  '1-1-1-1-1-1',
+  '1-1-1-1-1-1-1-1',
+  '1-1-1-1-1-1-1-1-1-1-1-1',
 ]
 
 // Per-block specs. requiresContent=true means body text is required.
@@ -33,8 +37,9 @@ export const BLOCK_TYPES = {
     },
   },
   title: {
-    label: 'Title Banner',
+    label: 'Title Banner / Hero',
     requiresContent: false,
+    allowsContent: true,                      // optional body = long-form description
     options: {
       title: { type: 'string', required: true },
       subtitle: { type: 'string' },
@@ -43,6 +48,9 @@ export const BLOCK_TYPES = {
       align: { type: 'enum', values: ['left', 'center', 'right'], default: 'center' },
       height: { type: 'enum', values: ['small', 'medium', 'large'], default: 'medium' },
       textColor: { type: 'enum', values: ['dark', 'light'], default: 'dark' },
+      buttonText: { type: 'string' },
+      buttonUrl: { type: 'string' },          // required-if-buttonText (custom check)
+      buttonStyle: { type: 'enum', values: ['primary', 'secondary', 'warning'], default: 'primary' },
     },
   },
   highlight: { label: 'Highlight', requiresContent: true, options: {} },
@@ -131,6 +139,18 @@ export const BLOCK_TYPES = {
     options: {
       layout: { type: 'enum', values: ROW_LAYOUTS, default: '1-1' },
       gap: { type: 'enum', values: ['small', 'medium', 'large'], default: 'medium' },
+    },
+  },
+  textCard: {
+    label: 'Text Card Grid',
+    requiresContent: false,
+    options: {
+      columns: { type: 'enum', values: ['2', '3', '4'], default: '3' },
+      gap: { type: 'enum', values: ['small', 'medium', 'large'], default: 'medium' },
+      backgroundColor: { type: 'color' },           // applies to every card unless item overrides
+      textColor: { type: 'enum', values: ['dark', 'light'], default: 'dark' },
+      // JSON array of { title, description, backgroundColor?, textColor? }
+      items: { type: 'json-array', itemType: 'object', required: true, minItems: 1 },
     },
   },
 }

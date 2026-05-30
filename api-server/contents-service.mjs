@@ -210,7 +210,13 @@ export async function listContents(siteId, {
   const db = await getMongoDb()
   const filter = { siteId, isDeleted: { $ne: true } }
   if (contentType) filter.contentType = contentType
-  if (status) filter.status = status
+  if (status) {
+    filter.status = status
+  } else {
+    // Default: hide trashed items (status='deleted') from the "All status" view.
+    // Caller must opt-in explicitly with status='deleted' to see them.
+    filter.status = { $ne: 'deleted' }
+  }
 
   const [items, total] = await Promise.all([
     db.collection('contents')
@@ -428,4 +434,108 @@ export async function getPublicContentBySlug(siteId, slug) {
     isDeleted: { $ne: true },
   })
   return serializeContent(doc)
+}
+
+// ── Author (own-content) API ─────────────────────────────────────────────────
+// Used by /api/me/contents/* — logged-in members editing posts they authored.
+// Fields manager+ controls (status, featured, categories, contentType) are
+// either forced to safe defaults on create or preserved-from-existing on update.
+
+const AUTHOR_EDITABLE_FIELDS = ['title', 'slug', 'summary', 'markdown', 'thumbnailImageId']
+
+function isAuthorOfDoc(doc, userId) {
+  if (!doc || !userId) return false
+  const authorId = doc.authorId ? String(doc.authorId) : ''
+  return authorId === String(userId)
+}
+
+// List posts authored by the given user. Optional contentType + status filters.
+// Trashed items (status='deleted') are hidden from author lists — only managers
+// see trashed items so they can decide whether to restore or hard-delete.
+export async function listOwnContents(userId, {
+  contentType = 'post',
+  status = null,
+  limit = 20,
+  skip = 0,
+} = {}) {
+  if (!userId || !ObjectId.isValid(userId)) return { items: [], total: 0 }
+  const db = await getMongoDb()
+  const filter = {
+    authorId: new ObjectId(userId),
+    isDeleted: { $ne: true },
+  }
+  if (contentType) filter.contentType = contentType
+  if (status) {
+    filter.status = status
+  } else {
+    filter.status = { $ne: 'deleted' }
+  }
+
+  const [items, total] = await Promise.all([
+    db.collection('contents')
+      .find(filter)
+      .sort({ updatedAt: -1 })
+      .skip(Number(skip) || 0)
+      .limit(Math.min(Number(limit) || 20, 100))
+      .toArray(),
+    db.collection('contents').countDocuments(filter),
+  ])
+
+  return { items: items.map(serializeContent), total }
+}
+
+// Get a single own-authored content by id. Returns null if not found or not authored by user.
+export async function getOwnContentById(userId, id) {
+  if (!userId || !ObjectId.isValid(userId) || !ObjectId.isValid(id)) return null
+  const db = await getMongoDb()
+  const doc = await db.collection('contents').findOne({
+    _id: new ObjectId(id),
+    authorId: new ObjectId(userId),
+    isDeleted: { $ne: true },
+  })
+  return serializeContent(doc)
+}
+
+// Create a new post authored by the given user. Forces post + draft status; ignores
+// admin-only fields (featured, categoryIds, visibility, etc.).
+export async function createOwnContent(siteId, userId, input) {
+  if (!siteId) throw new Error('siteId required')
+  if (!userId) throw new Error('userId required')
+  return createContent(
+    {
+      siteId,
+      contentType: 'post',
+      title: input.title,
+      slug: input.slug,
+      summary: input.summary || '',
+      markdown: input.markdown || '',
+      thumbnailImageId: input.thumbnailImageId || null,
+      tagIds: input.tagIds || [],
+      categoryIds: [],   // authors cannot assign categories
+      status: 'draft',   // authors start as draft; manager publishes
+      visibility: 'public',
+      meta: {},
+    },
+    userId,
+  )
+}
+
+// Update only author-editable fields on the given own-authored content.
+// Returns null if not found or not authored by user.
+export async function updateOwnContent(userId, id, input) {
+  if (!userId || !ObjectId.isValid(userId) || !ObjectId.isValid(id)) return null
+  const db = await getMongoDb()
+  const existing = await db.collection('contents').findOne({
+    _id: new ObjectId(id),
+    isDeleted: { $ne: true },
+  })
+  if (!isAuthorOfDoc(existing, userId)) return null
+
+  const fields = {}
+  for (const k of AUTHOR_EDITABLE_FIELDS) {
+    if (Object.hasOwn(input, k)) fields[k] = input[k]
+  }
+  if (Array.isArray(input.tagIds)) fields.tagIds = input.tagIds
+
+  return updateContent(id, existing.siteId, fields, userId)
 }

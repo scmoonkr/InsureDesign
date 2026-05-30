@@ -26,6 +26,7 @@ import FileBlock from './FileBlock.vue'
 import MapBlock from './MapBlock.vue'
 import TimelineBlock from './TimelineBlock.vue'
 import RowBlock from './RowBlock.vue'
+import TextCardBlock from './TextCardBlock.vue'
 
 type BlockNode = { type: string; props: Record<string, unknown> }
 type MediaInfo = { paths?: { original?: string }; title?: string; alt?: string }
@@ -55,6 +56,7 @@ const registry: Record<string, Component> = {
   map: MapBlock,
   timeline: TimelineBlock,
   row: RowBlock,
+  textCard: TextCardBlock,
 }
 
 const fallback = shallowRef(TextBlock)

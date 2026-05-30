@@ -72,10 +72,10 @@
           </label>
 
           <!-- Content body -->
-          <label v-if="spec.requiresContent" class="theme-form-field" style="grid-column: 1 / -1">
+          <label v-if="spec.requiresContent || spec.allowsContent" class="theme-form-field" style="grid-column: 1 / -1">
             <span>
-              본문
-              <em style="color:#EF4444;font-style:normal">*</em>
+              {{ contentLabel }}
+              <em v-if="spec.requiresContent" style="color:#EF4444;font-style:normal">*</em>
             </span>
             <textarea v-model="form.content" rows="4" :placeholder="contentPlaceholder"></textarea>
           </label>
@@ -111,6 +111,7 @@ type OptionDef = {
 type Spec = {
   label: string
   requiresContent: boolean
+  allowsContent?: boolean
   options: Record<string, OptionDef>
 }
 
@@ -127,6 +128,12 @@ const PLACEHOLDERS: Record<string, Record<string, string>> = {
   quote: { cite: '출처/저자' },
   file: { name: '표시 이름 (선택)' },
   map: { title: '위치 이름 (선택)' },
+  title: {
+    title: '제목 (필수)',
+    subtitle: '한 줄짜리 부제목 (선택)',
+    buttonText: 'CTA 버튼 텍스트 (예: 자세히 보기) — 비우면 버튼 없음',
+    buttonUrl: '/target 또는 https://...',
+  },
 }
 
 const CONTENT_PLACEHOLDERS: Record<string, string> = {
@@ -135,6 +142,12 @@ const CONTENT_PLACEHOLDERS: Record<string, string> = {
   quote: '인용문',
   youtube: 'https://www.youtube.com/watch?v=VIDEO_ID',
   file: 'https://example.com/file.pdf  또는  /uploads/.../file.pdf',
+  title: '설명 / 본문 텍스트 (여러 줄, 인라인 markdown 가능) — 선택',
+}
+
+// Per-block label override for the content textarea. Defaults to "본문".
+const CONTENT_LABELS: Record<string, string> = {
+  title: '설명',
 }
 
 const optionEntries = computed(() =>
@@ -147,6 +160,7 @@ const optionEntries = computed(() =>
 )
 
 const contentPlaceholder = computed(() => CONTENT_PLACEHOLDERS[props.type] || '')
+const contentLabel = computed(() => CONTENT_LABELS[props.type] || '본문')
 
 const form = reactive<Record<string, unknown>>({ content: '' })
 
@@ -193,9 +207,11 @@ function buildSnippet(type: string, sp: Spec, f: Record<string, unknown>): strin
     optionLines.push(`${key}: ${v}`)
   }
   const lines = [`:::${type}`, ...optionLines]
-  if (sp.requiresContent) {
+  const body = String(f.content || '').trim()
+  // Emit body when required, or when allowed and the user actually typed something.
+  if (sp.requiresContent || (sp.allowsContent && body)) {
     if (optionLines.length) lines.push('') // blank separator before body
-    lines.push(String(f.content || '').trim())
+    lines.push(body)
   }
   lines.push(':::')
   return lines.join('\n')

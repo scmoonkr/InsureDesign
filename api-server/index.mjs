@@ -13,9 +13,9 @@ import { listMedia, createMedia, updateMediaMeta, deleteMedia, getMediaByIds } f
 import { getSiteConfig, updateSiteTheme, getSiteSettings, updateSiteSettings } from './settings-service.mjs'
 import { listSites, getSiteById, getSiteByDomain, createSite, updateSite, addDomain, removeDomain } from './sites-service.mjs'
 import { resolvePublicSiteId, getAdminSiteId, checkAdmin, checkSession, isSuperUser } from './middleware.mjs'
-import { listContents, getContentById, createContent, updateContent, deleteContent, listPublicContents, getPublicContentBySlug, titleToSlug, collectImageIds, previewMarkdown } from './contents-service.mjs'
+import { listContents, getContentById, createContent, updateContent, listPublicContents, getPublicContentBySlug, titleToSlug, collectImageIds, previewMarkdown, listOwnContents, getOwnContentById, createOwnContent, updateOwnContent } from './contents-service.mjs'
 import { listCategories, createCategory, updateCategory, deleteCategory, getCategoryBySlug } from './categories-service.mjs'
-import { listTags, findOrCreateTagsByNames, getTagBySlug } from './tags-service.mjs'
+import { listTags, findOrCreateTagsByNames, getTagBySlug, getTagsByIds } from './tags-service.mjs'
 import { listMenus, createMenu, updateMenu, deleteMenu } from './menus-service.mjs'
 
 loadEnv()
@@ -516,7 +516,13 @@ async function handleUploadMedia(req, res) {
     sendError(req, res, 401, 'Unauthorized')
     return
   }
+  const siteId = getAdminSiteId(req, new URL(req.url || '/', getConfig().apiBase))
+  await processMediaUpload(req, res, session, siteId)
+}
 
+// Shared multipart-upload core used by both admin and author (/api/me) endpoints.
+// Parses parts, persists to disk, creates media docs under the given siteId.
+async function processMediaUpload(req, res, session, siteId) {
   const contentType = req.headers['content-type'] || ''
   const boundary = getMultipartBoundary(contentType)
   if (!boundary) {
@@ -539,7 +545,6 @@ async function handleUploadMedia(req, res) {
   }
 
   const { uploadDir, apiBase } = getConfig()
-  const siteId = getAdminSiteId(req, new URL(req.url || '/', getConfig().apiBase))
   const savedItems = []
 
   for (const part of parts) {
@@ -958,7 +963,7 @@ function validateContentInput(input) {
   const title = typeof input.title === 'string' ? input.title.trim() : ''
   if (!title || title.length > 200) return { error: 'title must be 1–200 characters.' }
 
-  const status = ['draft', 'published', 'hidden'].includes(input.status) ? input.status : 'draft'
+  const status = ['draft', 'published', 'hidden', 'deleted'].includes(input.status) ? input.status : 'draft'
   const visibility = ['public', 'members', 'private'].includes(input.visibility) ? input.visibility : 'public'
 
   return {
@@ -1084,16 +1089,149 @@ async function handleUpdateContent(req, res, contentId, url) {
   }
 }
 
-// Admin: delete content (soft)
+// Admin: "delete" content — sets status='deleted' (trash-bin behavior). The item
+// stays in the DB and can be restored by changing its status back via the editor.
 async function handleDeleteContent(req, res, contentId, url) {
   const siteId = getAdminSiteId(req, url)
   const auth = await checkAdmin(req, siteId, 'manager')
   if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
 
-  const deleted = await deleteContent(contentId, siteId, auth.user.id)
-  if (!deleted) { sendError(req, res, 404, 'Content not found'); return }
+  try {
+    const content = await updateContent(contentId, siteId, { status: 'deleted' }, auth.user.id)
+    if (!content) { sendError(req, res, 404, 'Content not found'); return }
+    sendJson(req, res, 200, { ok: true })
+  } catch (err) {
+    if (err && err.blockErrors) { sendError(req, res, 400, err.message); return }
+    throw err
+  }
+}
 
-  sendJson(req, res, 200, { ok: true })
+// ── /api/me/contents — author-scoped (logged-in users editing own posts) ────
+
+async function handleListOwnContents(req, res, url) {
+  const auth = checkSession(req)
+  if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
+  const result = await listOwnContents(auth.session.id, {
+    contentType: url.searchParams.get('type') || 'post',
+    status: url.searchParams.get('status') || null,
+    limit: url.searchParams.get('limit') || 20,
+    skip: url.searchParams.get('skip') || 0,
+  })
+  sendJson(req, res, 200, result)
+}
+
+async function handleGetOwnContent(req, res, contentId) {
+  const auth = checkSession(req)
+  if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
+  const content = await getOwnContentById(auth.session.id, contentId)
+  if (!content) { sendError(req, res, 404, 'Content not found'); return }
+  // Enrich with tag names so the author editor can populate its input without
+  // a separate /api/admin/tags fetch (which authors can't reach).
+  const tags = await getTagsByIds(content.siteId, content.tagIds || [])
+  sendJson(req, res, 200, { content: { ...content, tagNames: tags.map(t => t.name) } })
+}
+
+async function handleCreateOwnContent(req, res) {
+  const auth = checkSession(req)
+  if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
+  const siteId = await resolvePublicSiteId(req)
+
+  const input = await readJsonBody(req)
+  const title = typeof input.title === 'string' ? input.title.trim() : ''
+  if (!title || title.length > 200) { sendError(req, res, 400, 'title must be 1–200 characters.'); return }
+
+  const tagIds = Array.isArray(input.tagNames) && input.tagNames.length
+    ? await findOrCreateTagsByNames(siteId, input.tagNames, auth.session.id)
+    : []
+
+  try {
+    const content = await createOwnContent(siteId, auth.session.id, {
+      title,
+      slug: typeof input.slug === 'string' ? input.slug.trim() : '',
+      summary: typeof input.summary === 'string' ? input.summary.trim().slice(0, 500) : '',
+      markdown: typeof input.markdown === 'string' ? input.markdown : '',
+      thumbnailImageId: input.thumbnailImageId || null,
+      tagIds,
+    })
+    sendJson(req, res, 201, { content })
+  } catch (err) {
+    if (err && err.blockErrors) { sendError(req, res, 400, err.message); return }
+    throw err
+  }
+}
+
+async function handleUpdateOwnContent(req, res, contentId) {
+  const auth = checkSession(req)
+  if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
+
+  const existing = await getOwnContentById(auth.session.id, contentId)
+  if (!existing) { sendError(req, res, 404, 'Content not found'); return }
+
+  const input = await readJsonBody(req)
+  const fields = {}
+  if (typeof input.title === 'string') fields.title = input.title.trim().slice(0, 200)
+  if (typeof input.slug === 'string') fields.slug = input.slug.trim()
+  if (typeof input.summary === 'string') fields.summary = input.summary.trim().slice(0, 500)
+  if (typeof input.markdown === 'string') fields.markdown = input.markdown
+  if (Object.hasOwn(input, 'thumbnailImageId')) {
+    fields.thumbnailImageId = input.thumbnailImageId || null
+  }
+  if (Array.isArray(input.tagNames)) {
+    fields.tagIds = await findOrCreateTagsByNames(existing.siteId, input.tagNames, auth.session.id)
+  }
+
+  try {
+    const content = await updateOwnContent(auth.session.id, contentId, fields)
+    if (!content) { sendError(req, res, 404, 'Content not found'); return }
+    sendJson(req, res, 200, { content })
+  } catch (err) {
+    if (err && err.blockErrors) { sendError(req, res, 400, err.message); return }
+    throw err
+  }
+}
+
+async function handlePreviewOwnContent(req, res) {
+  const auth = checkSession(req)
+  if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
+  const siteId = await resolvePublicSiteId(req)
+
+  const input = await readJsonBody(req)
+  const result = await previewMarkdown(input.markdown || '', siteId)
+
+  const { apiBase } = getConfig()
+  for (const id of Object.keys(result.mediaMap)) {
+    const item = result.mediaMap[id]
+    if (item?.paths?.original?.startsWith('/uploads/')) {
+      result.mediaMap[id] = {
+        ...item,
+        paths: { ...item.paths, original: `${apiBase}${item.paths.original}` },
+      }
+    }
+  }
+  sendJson(req, res, 200, result)
+}
+
+// /api/me/media — list + upload scoped to the current site (resolved from request).
+async function handleListOwnMedia(req, res) {
+  const auth = checkSession(req)
+  if (!auth.ok) { sendError(req, res, auth.status, auth.message); return }
+  const siteId = await resolvePublicSiteId(req)
+  const { apiBase } = getConfig()
+  const items = await listMedia(siteId)
+  const result = items.map(item => ({
+    ...item,
+    paths: item.paths?.original
+      ? { ...item.paths, original: `${apiBase}${item.paths.original}` }
+      : item.paths,
+  }))
+  sendJson(req, res, 200, { items: result })
+}
+
+async function handleUploadOwnMedia(req, res) {
+  const session = getAuthSession(req)
+  if (!session) { sendError(req, res, 401, 'Unauthorized'); return }
+  const siteId = await resolvePublicSiteId(req)
+  await processMediaUpload(req, res, session, siteId)
 }
 
 // Public: list published contents in a category — returns category + items + maps in one round trip
@@ -1605,6 +1743,28 @@ async function handleRequest(req, res) {
       if (req.method === 'GET') { await handleGetContent(req, res, adminContentMatch[1], url); return }
       if (req.method === 'PUT') { await handleUpdateContent(req, res, adminContentMatch[1], url); return }
       if (req.method === 'DELETE') { await handleDeleteContent(req, res, adminContentMatch[1], url); return }
+    }
+
+    // ── /api/me: author-scoped contents + media ─────────────────────────────
+    if (req.method === 'GET' && url.pathname === '/api/me/contents') {
+      await handleListOwnContents(req, res, url); return
+    }
+    if (req.method === 'POST' && url.pathname === '/api/me/contents') {
+      await handleCreateOwnContent(req, res); return
+    }
+    if (req.method === 'POST' && url.pathname === '/api/me/contents/preview') {
+      await handlePreviewOwnContent(req, res); return
+    }
+    const meContentMatch = url.pathname.match(/^\/api\/me\/contents\/([^/]+)$/)
+    if (meContentMatch) {
+      if (req.method === 'GET') { await handleGetOwnContent(req, res, meContentMatch[1]); return }
+      if (req.method === 'PUT') { await handleUpdateOwnContent(req, res, meContentMatch[1]); return }
+    }
+    if (req.method === 'GET' && url.pathname === '/api/me/media') {
+      await handleListOwnMedia(req, res); return
+    }
+    if (req.method === 'POST' && url.pathname === '/api/me/media/upload') {
+      await handleUploadOwnMedia(req, res); return
     }
 
     // ── Public: Contents ─────────────────────────────────────────────────────
