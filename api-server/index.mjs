@@ -1406,6 +1406,109 @@ async function handlePublicListContents(req, res, url) {
   sendJson(req, res, 200, { items, total })
 }
 
+// Public: published posts as card data — filtered by category and/or tag slugs.
+// Used by the `postList` block (always queries fresh, never relies on cached html).
+async function handlePublicPostCards(req, res, url) {
+  const siteId = await resolvePublicSiteId(req)
+  const parseCsv = s => String(s || '').split(',').map(t => t.trim()).filter(Boolean)
+  const categorySlugs = parseCsv(url.searchParams.get('categories'))
+  const tagSlugs = parseCsv(url.searchParams.get('tags'))
+  const limit = Math.min(Math.max(Number(url.searchParams.get('limit')) || 6, 1), 24)
+
+  const db = await getMongoDb()
+
+  // Resolve slugs → ObjectIds (silently drop unknown slugs so a typo doesn't 500).
+  const [catDocs, tagDocs] = await Promise.all([
+    categorySlugs.length
+      ? db.collection('categories').find(
+          { siteId, slug: { $in: categorySlugs }, isDeleted: { $ne: true } },
+          { projection: { _id: 1 } },
+        ).toArray()
+      : [],
+    tagSlugs.length
+      ? db.collection('tags').find(
+          { siteId, slug: { $in: tagSlugs }, isDeleted: { $ne: true } },
+          { projection: { _id: 1 } },
+        ).toArray()
+      : [],
+  ])
+
+  const filter = {
+    siteId,
+    contentType: 'post',
+    status: 'published',
+    visibility: 'public',
+    isDeleted: { $ne: true },
+  }
+  if (categorySlugs.length) {
+    if (!catDocs.length) { sendJson(req, res, 200, { items: [] }); return }
+    filter.categoryIds = { $in: catDocs.map(d => d._id) }
+  }
+  if (tagSlugs.length) {
+    if (!tagDocs.length) { sendJson(req, res, 200, { items: [] }); return }
+    filter.tagIds = { $in: tagDocs.map(d => d._id) }
+  }
+
+  const posts = await db.collection('contents')
+    .find(filter, {
+      projection: {
+        title: 1, slug: 1, summary: 1, publishedAt: 1, thumbnailImageId: 1,
+        authorId: 1, meta: 1,
+      },
+    })
+    .sort({ publishedAt: -1 })
+    .limit(limit)
+    .toArray()
+
+  // Enrich: thumbnails + authors in one batch each.
+  const thumbIds = posts.map(p => p.thumbnailImageId).filter(Boolean)
+  const authorIds = [...new Set(posts.map(p => p.authorId).filter(Boolean).map(id => String(id)))]
+    .map(id => new ObjectId(id))
+
+  const [mediaDocs, authorDocs] = await Promise.all([
+    thumbIds.length
+      ? db.collection('media').find(
+          { _id: { $in: thumbIds } },
+          { projection: { paths: 1, alt: 1, title: 1 } },
+        ).toArray()
+      : [],
+    authorIds.length
+      ? db.collection('users').find(
+          { _id: { $in: authorIds }, isDeleted: { $ne: true } },
+          { projection: { name: 1, nickname: 1, avatarUrl: 1 } },
+        ).toArray()
+      : [],
+  ])
+
+  const { apiBase } = getConfig()
+  const mediaById = {}
+  for (const m of mediaDocs) {
+    const raw = m.paths?.original || ''
+    mediaById[String(m._id)] = raw.startsWith('/uploads/') ? `${apiBase}${raw}` : raw
+  }
+  const authorById = {}
+  for (const u of authorDocs) {
+    authorById[String(u._id)] = {
+      id: String(u._id),
+      name: u.nickname || u.name || '',
+      avatarUrl: u.avatarUrl || '',
+    }
+  }
+
+  const items = posts.map(p => ({
+    id: String(p._id),
+    title: p.title || '',
+    slug: p.slug || '',
+    summary: p.summary || '',
+    publishedAt: p.publishedAt,
+    featured: !!(p.meta?.featured),
+    thumbnailUrl: p.thumbnailImageId ? (mediaById[String(p.thumbnailImageId)] || '') : '',
+    author: p.authorId ? (authorById[String(p.authorId)] || null) : null,
+  }))
+
+  sendJson(req, res, 200, { items })
+}
+
 // Public: get single published content by slug
 async function handlePublicGetContent(req, res, slug, url) {
   const siteId = await resolvePublicSiteId(req)
@@ -1770,6 +1873,11 @@ async function handleRequest(req, res) {
     // ── Public: Contents ─────────────────────────────────────────────────────
     if (req.method === 'GET' && url.pathname === '/api/public/contents') {
       await handlePublicListContents(req, res, url)
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/public/post-cards') {
+      await handlePublicPostCards(req, res, url)
       return
     }
 

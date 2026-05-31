@@ -25,6 +25,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { renderInlineMarkdown } from '~/utils/markdown'
 
 type MediaInfo = { paths?: { original?: string } }
 
@@ -91,28 +92,5 @@ const buttonHref = computed(() => {
 })
 const buttonExternal = computed(() => /^https?:/i.test(buttonHref.value))
 
-// Minimal inline-markdown renderer mirroring the server's renderInlineMarkdown
-// so server-rendered HTML and client-side hydrated output match for descriptions.
-const HTML_ESCAPE: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
-function esc(s: string) {
-  return String(s ?? '').replace(/[&<>"']/g, c => HTML_ESCAPE[c])
-}
-function renderInline(md: string) {
-  if (!md) return ''
-  let html = esc(md)
-  html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>')
-  html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>')
-  html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
-  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
-  html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
-  html = html.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-  return html.split(/\n{2,}/).map(p => {
-    const t = p.trim()
-    if (!t) return ''
-    if (/^<(h[1-6]|ul|ol|pre|blockquote|p|aside|div)/.test(t)) return t
-    return `<p>${t.replace(/\n/g, '<br/>')}</p>`
-  }).join('\n')
-}
-const renderedDescription = computed(() => renderInline(description.value))
+const renderedDescription = computed(() => renderInlineMarkdown(description.value))
 </script>

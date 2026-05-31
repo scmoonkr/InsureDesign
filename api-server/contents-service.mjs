@@ -31,7 +31,15 @@ export function collectImageIds(nodes) {
       for (const it of n.props.items) if (it && typeof it.imageId === 'string') ids.add(it.imageId)
     } else if (n.type === 'title' && typeof n.props?.imageId === 'string' && n.props.imageId) {
       ids.add(n.props.imageId)
+    } else if (n.type === 'heroCards' && typeof n.props?.imageId === 'string' && n.props.imageId) {
+      ids.add(n.props.imageId)
+    } else if (n.type === 'image' && typeof n.props?.imageId === 'string' && n.props.imageId) {
+      ids.add(n.props.imageId)
     } else if (n.type === 'timeline' && Array.isArray(n.props?.items)) {
+      for (const it of n.props.items) {
+        if (it && typeof it.imageId === 'string' && it.imageId) ids.add(it.imageId)
+      }
+    } else if (n.type === 'mediaText' && Array.isArray(n.props?.items)) {
       for (const it of n.props.items) {
         if (it && typeof it.imageId === 'string' && it.imageId) ids.add(it.imageId)
       }
@@ -47,9 +55,9 @@ function missingImageIdsForNode(n, mediaMap) {
   if (n.type === 'gallery') (n.props?.imageIds || []).forEach(check)
   else if (n.type === 'imageGrid' || n.type === 'slide') {
     (n.props?.items || []).forEach(it => check(it?.imageId))
-  } else if (n.type === 'title') {
+  } else if (n.type === 'title' || n.type === 'heroCards' || n.type === 'image') {
     if (n.props?.imageId) check(n.props.imageId)
-  } else if (n.type === 'timeline') {
+  } else if (n.type === 'timeline' || n.type === 'mediaText') {
     (n.props?.items || []).forEach(it => { if (it?.imageId) check(it.imageId) })
   }
   return missing

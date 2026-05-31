@@ -221,6 +221,14 @@
               <button
                 v-if="selectedMenuId"
                 type="button"
+                class="theme-form-submit theme-form-submit-secondary-soft"
+                :disabled="isSaving"
+                title="이 메뉴를 복사해서 새 메뉴로 (예: header → footer)"
+                @click="duplicateMenu"
+              >복사</button>
+              <button
+                v-if="selectedMenuId"
+                type="button"
                 class="theme-form-submit theme-form-submit-warning"
                 :disabled="isSaving"
                 @click="deleteCurrentMenu"
@@ -346,7 +354,12 @@ const { data: menusData, refresh: refreshMenus } = useFetch<{ items: Menu[] }>(m
 const menusList = computed<Menu[]>(() => menusData.value?.items ?? [])
 
 // When user selects a menu from the dropdown, populate the form
+const isDuplicating = ref(false)
+
 watch(selectedMenuId, (id) => {
+  // duplicateMenu() flips selectedMenuId to '' for the "new" workflow but wants
+  // to keep the just-cloned form data — skip the reset/load while it's running.
+  if (isDuplicating.value) return
   if (!id) { resetForNew(); return }
   const m = menusList.value.find(x => x.id === id)
   if (!m) return
@@ -514,6 +527,39 @@ function resetForNew() {
   expandedItemId.value = ''
   message.value = ''
   isError.value = false
+}
+
+// Duplicate the currently-loaded menu: clone every item with fresh IDs (and remap
+// parentItemId references), append "(Copy)" to the name, flip the location to its
+// counterpart (header ↔ footer) as a sensible default, and switch into the
+// "new menu" workflow so saving will create a new record.
+function duplicateMenu() {
+  if (!selectedMenuId.value) return
+
+  const idMap = new Map<string, string>()
+  for (const item of form.items) idMap.set(item.id, makeId())
+  const clonedItems: FlatItem[] = form.items.map(item => ({
+    ...item,
+    id: idMap.get(item.id)!,
+    parentItemId: item.parentItemId ? (idMap.get(item.parentItemId) ?? null) : null,
+  }))
+  const newName = `${form.name || '메뉴'} (Copy)`
+  const newLocation =
+    form.location === 'header' ? 'footer'
+    : form.location === 'footer' ? 'header'
+    : form.location
+
+  isDuplicating.value = true
+  selectedMenuId.value = ''
+  form.name = newName
+  form.location = newLocation
+  form.items = clonedItems
+  expandedItemId.value = ''
+  message.value = '복사본을 만들었습니다. 이름과 위치를 확인하고 "메뉴 생성"을 눌러 저장하세요.'
+  isError.value = false
+  // Release the guard on the next tick so the watcher resumes normal behavior
+  // when the user picks a different menu later.
+  nextTick(() => { isDuplicating.value = false })
 }
 
 async function saveMenu() {

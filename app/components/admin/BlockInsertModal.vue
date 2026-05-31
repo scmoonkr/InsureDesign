@@ -134,6 +134,10 @@ const PLACEHOLDERS: Record<string, Record<string, string>> = {
     buttonText: 'CTA 버튼 텍스트 (예: 자세히 보기) — 비우면 버튼 없음',
     buttonUrl: '/target 또는 https://...',
   },
+  image: {
+    caption: '이미지 아래 설명 (선택)',
+    link: '클릭 시 이동할 URL (선택)',
+  },
 }
 
 const CONTENT_PLACEHOLDERS: Record<string, string> = {

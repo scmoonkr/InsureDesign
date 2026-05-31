@@ -19,10 +19,10 @@
     "clear:drop": "node scripts/clear-data.mjs --drop"
   },
   "dependencies": {
+    "marked": "^18.0.4",
     "mongodb": "^7.2.0",
     "nuxt": "^4.4.6",
     "typescript": "^6.0.3",
     "vue": "^3.5.34"
-  },
-  "devDependencies": {}
+  }
 }

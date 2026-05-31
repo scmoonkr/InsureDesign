@@ -86,6 +86,13 @@
               type="button"
               class="theme-form-submit theme-form-submit-secondary-soft"
               :disabled="!blockToInsert"
+              @click="openSamplePreview"
+              title="선택한 block의 sample을 미리 본 뒤 그대로 삽입"
+            >Sample</button>
+            <button
+              type="button"
+              class="theme-form-submit theme-form-submit-secondary-soft"
+              :disabled="!blockToInsert"
               @click="insertBlock"
             >Insert</button>
           </div>
@@ -144,7 +151,9 @@
           </select>
         </label>
 
-        <!-- Bottom row: 2-column — left has Status/flag/eyebrow stack, right has Featured Image -->
+        <!-- Bottom row: 2-column — left has Status, right has Featured Image.
+             Featured/Eyebrow flag row sits BELOW as a full-width grid spanning
+             both columns. -->
         <div :class="['content-editor-bottom', { 'no-left': !isAdmin }]">
           <div v-if="isAdmin" class="content-editor-bottom-left">
             <label class="theme-form-field">
@@ -156,7 +165,54 @@
                 <option value="deleted">Deleted (휴지통)</option>
               </select>
             </label>
+          </div>
 
+          <div class="content-editor-bottom-right">
+            <span class="theme-form-label">Featured Image</span>
+            <div
+              :class="[
+                'featured-dropzone',
+                {
+                  'is-dragover': isDraggingOver && !isAdmin,
+                  'has-image': !!form.thumbnailImageId,
+                  'is-uploading': featuredUploading,
+                },
+              ]"
+              role="button"
+              tabindex="0"
+              @click="onFeaturedClick"
+              @keydown.enter.space.prevent="onFeaturedClick"
+              @dragenter.prevent="isAdmin ? null : (isDraggingOver = true)"
+              @dragover.prevent="isAdmin ? null : (isDraggingOver = true)"
+              @dragleave.prevent="isAdmin ? null : (isDraggingOver = false)"
+              @drop.prevent="isAdmin ? null : onFeaturedDrop($event)"
+            >
+              <img v-if="featuredImageUrl" :src="featuredImageUrl" alt="Featured" />
+              <div v-else class="featured-dropzone-empty">
+                <span>{{ isAdmin ? 'Media에서 선택' : '이미지를 끌어다 놓거나 클릭' }}</span>
+              </div>
+              <button
+                v-if="form.thumbnailImageId && !featuredUploading"
+                type="button"
+                class="featured-dropzone-remove"
+                aria-label="이미지 제거"
+                @click.stop="clearFeaturedImage"
+              >×</button>
+              <div v-if="isDraggingOver && !isAdmin" class="featured-dropzone-overlay">Drop here</div>
+              <div v-if="featuredUploading" class="featured-dropzone-overlay">업로드 중...</div>
+            </div>
+            <input
+              ref="featuredFileRef"
+              type="file"
+              accept="image/*"
+              style="display:none"
+              @change="onFeaturedFile"
+            />
+            <p v-if="featuredError" class="theme-form-status error" style="margin-top:6px">{{ featuredError }}</p>
+          </div>
+
+          <!-- Featured/showInMenu + Eyebrow — full row spanning both columns -->
+          <div v-if="isAdmin" class="content-editor-bottom-flags">
             <label v-if="isPost" class="theme-form-field">
               <span>이 글을 추천으로 표시</span>
               <label class="theme-backend-posts-check">
@@ -179,46 +235,6 @@
                 <span>제목·작성자·날짜 헤더 표시 (페이지는 banner)</span>
               </label>
             </label>
-          </div>
-
-          <div class="content-editor-bottom-right">
-            <span class="theme-form-label">Featured Image</span>
-            <div
-              :class="[
-                'featured-dropzone',
-                { 'is-dragover': isDraggingOver, 'has-image': !!form.thumbnailImageId, 'is-uploading': featuredUploading },
-              ]"
-              role="button"
-              tabindex="0"
-              @click="featuredFileRef?.click()"
-              @keydown.enter.space.prevent="featuredFileRef?.click()"
-              @dragenter.prevent="isDraggingOver = true"
-              @dragover.prevent="isDraggingOver = true"
-              @dragleave.prevent="isDraggingOver = false"
-              @drop.prevent="onFeaturedDrop"
-            >
-              <img v-if="featuredImageUrl" :src="featuredImageUrl" alt="Featured" />
-              <div v-else class="featured-dropzone-empty">
-                <span>이미지를 끌어다 놓거나 클릭</span>
-              </div>
-              <button
-                v-if="form.thumbnailImageId && !featuredUploading"
-                type="button"
-                class="featured-dropzone-remove"
-                aria-label="이미지 제거"
-                @click.stop="clearFeaturedImage"
-              >×</button>
-              <div v-if="isDraggingOver" class="featured-dropzone-overlay">Drop here</div>
-              <div v-if="featuredUploading" class="featured-dropzone-overlay">업로드 중...</div>
-            </div>
-            <input
-              ref="featuredFileRef"
-              type="file"
-              accept="image/*"
-              style="display:none"
-              @change="onFeaturedFile"
-            />
-            <p v-if="featuredError" class="theme-form-status error" style="margin-top:6px">{{ featuredError }}</p>
           </div>
         </div>
       </section>
@@ -244,7 +260,7 @@
       >{{ isDeleting ? '삭제 중...' : '삭제' }}</button>
     </footer>
 
-    <!-- Media picker (for image blocks + featured image upload via picker mode) -->
+    <!-- Media picker (for image blocks — multiple selection) -->
     <MediaPicker
       v-if="pickerOpen"
       :open="pickerOpen"
@@ -253,12 +269,28 @@
       @pick="onPickerPick"
     />
 
+    <!-- Featured-image picker (admin mode — single selection from media library) -->
+    <MediaPicker
+      v-if="featuredPickerOpen"
+      :open="featuredPickerOpen"
+      @close="featuredPickerOpen = false"
+      @pick="onFeaturedPickerPick"
+    />
+
     <!-- Block insert modal (schema-driven form for non-image blocks) -->
     <BlockInsertModal
       v-if="blockModalOpen"
       :type="blockToInsert"
       @close="cancelBlockModal"
       @insert="onBlockInserted"
+    />
+
+    <!-- Block sample preview modal — opened by the "Sample" button next to Insert -->
+    <BlockSampleModal
+      v-if="sampleModalOpen"
+      :type="blockToInsert"
+      @close="sampleModalOpen = false"
+      @insert="onSampleInserted"
     />
 
     <!-- Preview modal -->
@@ -295,6 +327,7 @@
 import { computed, reactive, ref, watch, nextTick, onMounted } from 'vue'
 import MediaPicker from '~/components/admin/MediaPicker.vue'
 import BlockInsertModal from '~/components/admin/BlockInsertModal.vue'
+import BlockSampleModal from '~/components/admin/BlockSampleModal.vue'
 import BlockRenderer from '~/components/blocks/BlockRenderer.vue'
 import CategorySelect from '~/components/admin/CategorySelect.vue'
 import { ROW_LAYOUTS } from '~~/shared/blocks/registry.js'
@@ -357,6 +390,7 @@ const BLOCK_OPTIONS = [
   { value: 'quote', label: 'Quote (인용)' },
   { value: 'youtube', label: 'YouTube' },
   { value: 'button', label: 'Button' },
+  { value: 'image', label: 'Image (single)' },
   { value: 'gallery', label: 'Gallery' },
   { value: 'imageGrid', label: 'Image Grid' },
   { value: 'slide', label: 'Slide' },
@@ -364,6 +398,11 @@ const BLOCK_OPTIONS = [
   { value: 'map', label: 'Map' },
   { value: 'timeline', label: 'Timeline' },
   { value: 'textCard', label: 'Text Card Grid' },
+  { value: 'heroCards', label: 'Hero + Cards' },
+  { value: 'iconList', label: 'Icon List' },
+  { value: 'mediaText', label: 'Media + Text (alternating)' },
+  { value: 'tabs', label: 'Tabs' },
+  { value: 'postList', label: 'Post List (categories / tags)' },
 ]
 
 const TEMPLATE_OPTIONS = [
@@ -383,9 +422,49 @@ const TEXTCARD_PLACEHOLDER = [
   { title: 'Add a Title', description: 'Use this space to add a medium length description. Be brief and give enough information to earn a click.' },
   { title: 'Add a Title', description: 'Use this space to add a medium length description. Be brief and give enough information to earn a click.' },
 ]
+const HEROCARDS_PLACEHOLDER = [
+  { title: 'Add a Title', description: 'Use this space to add a medium length description. Be brief and give enough information to earn a click.' },
+  { title: 'Add a Title', description: 'Use this space to add a medium length description. Be brief and give enough information to earn a click.' },
+  { title: 'Add a Title', description: 'Use this space to add a medium length description. Be brief and give enough information to earn a click.' },
+]
+const ICONLIST_PLACEHOLDER = [
+  { icon: 'ⓘ', title: 'Give your list item a title', description: 'Use this short paragraph to write a supporting description of your list item. Remember to let your readers know why this list item is essential.' },
+  { icon: '⏱', title: 'Give your list item a title', description: 'Use this short paragraph to write a supporting description of your list item. Remember to let your readers know why this list item is essential.' },
+  { icon: '🔊', title: 'Give your list item a title', description: 'Use this short paragraph to write a supporting description of your list item. Remember to let your readers know why this list item is essential.' },
+  { icon: '★', title: 'Give your list item a title', description: 'Use this short paragraph to write a supporting description of your list item. Remember to let your readers know why this list item is essential.' },
+  { icon: '◆', title: 'Give your list item a title', description: 'Use this short paragraph to write a supporting description of your list item. Remember to let your readers know why this list item is essential.' },
+  { icon: '✓', title: 'Give your list item a title', description: 'Use this short paragraph to write a supporting description of your list item. Remember to let your readers know why this list item is essential.' },
+]
+const TABS_PLACEHOLDER = [
+  {
+    label: 'Tab name',
+    title: 'Type a brief and clear title for this panel.',
+    content: 'Write a short descriptive paragraph about your tab that will help users find what they are looking for and get access to content without further exploration.\n\n**Featured subhead**\n\n- Add a single and succinct list item\n- Add a single and succinct list item\n- Add a single and succinct list item',
+  },
+  { label: 'Tab name', title: 'Second panel title', content: 'Second panel body — markdown supported.' },
+  { label: 'Tab name', title: 'Third panel title', content: 'Third panel body — markdown supported.' },
+]
+const MEDIATEXT_PLACEHOLDER = [
+  {
+    imageId: '',
+    title: 'Add a descriptive title for the column.',
+    description: 'Use this space to add a medium length description. Be brief and give enough information to earn their attention.',
+    list: ['Add a list item', 'Add a list item', 'Add a list item'],
+  },
+  {
+    imageId: '',
+    title: 'Add a descriptive title for the column.',
+    description: 'Use this space to add a medium length description. Be brief and give enough information to earn their attention.',
+    list: ['Add a list item', 'Add a list item', 'Add a list item'],
+  },
+]
 const TEXT_TEMPLATES: Record<string, string> = {
   timeline: `:::timeline\nitems: ${JSON.stringify(TIMELINE_PLACEHOLDER)}\n:::`,
   textCard: `:::textCard\ncolumns: 3\ngap: medium\nbackgroundColor: #5d7e8d\ntextColor: light\nitems: ${JSON.stringify(TEXTCARD_PLACEHOLDER)}\n:::`,
+  heroCards: `:::heroCards\neyebrow: ADD AN OVERLINE TEXT\ntitle: Briefly and concisely explain what you do for your audience.\nalign: left\nheight: large\ntextColor: light\ncardColumns: 3\ncardGap: medium\ncardOverlap: on\ncards: ${JSON.stringify(HEROCARDS_PLACEHOLDER)}\n:::`,
+  iconList: `:::iconList\ncolumns: 2\ngap: medium\niconColor: #3d7e7c\niconTextColor: light\nitems: ${JSON.stringify(ICONLIST_PLACEHOLDER)}\n:::`,
+  mediaText: `:::mediaText\nimageFrame: soft\nframeColor: #d8efe5\nalternate: on\nimagePosition: left\ngap: large\nitems: ${JSON.stringify(MEDIATEXT_PLACEHOLDER)}\n:::`,
+  tabs: `:::tabs\nitems: ${JSON.stringify(TABS_PLACEHOLDER)}\n:::`,
 }
 
 function buildImageBlock(type: string, imageIds: string[]): string {
@@ -428,11 +507,14 @@ const featuredUploading = ref(false)
 const featuredError = ref('')
 const featuredImageUrl = ref('')
 const isDraggingOver = ref(false)
+const featuredPickerOpen = ref(false)
 const blockToInsert = ref('')
 const pickerOpen = ref(false)
 const pickerCursor = ref(0)
 const blockModalOpen = ref(false)
 const blockModalCursor = ref(0)
+const sampleModalOpen = ref(false)
+const sampleModalCursor = ref(0)
 
 const form = reactive({
   title: '',
@@ -674,6 +756,21 @@ function onBlockInserted(snippet: string) {
   blockToInsert.value = ''
 }
 
+function openSamplePreview() {
+  if (!blockToInsert.value) return
+  const ta = markdownRef.value
+  sampleModalCursor.value = ta?.selectionStart ?? form.markdown.length
+  sampleModalOpen.value = true
+}
+
+function onSampleInserted(markdown: string) {
+  sampleModalOpen.value = false
+  const ta = markdownRef.value
+  if (ta) ta.setSelectionRange(sampleModalCursor.value, sampleModalCursor.value)
+  insertAtCursor(markdown)
+  blockToInsert.value = ''
+}
+
 function onPickerPick(ids: string[]) {
   const type = blockToInsert.value
   pickerOpen.value = false
@@ -775,6 +872,23 @@ async function onFeaturedDrop(event: DragEvent) {
 function clearFeaturedImage() {
   form.thumbnailImageId = ''
   featuredImageUrl.value = ''
+}
+
+// Click on the featured slot — admin opens the Media picker (selects from the
+// existing library), author falls back to the file input (no admin media access).
+function onFeaturedClick() {
+  if (isAdmin.value) {
+    featuredPickerOpen.value = true
+  } else {
+    featuredFileRef.value?.click()
+  }
+}
+
+function onFeaturedPickerPick(ids: string[]) {
+  featuredPickerOpen.value = false
+  if (!ids.length) return
+  form.thumbnailImageId = ids[0]
+  // featuredImageUrl auto-updates via the existing [thumbnailImageId, mediaMap] watcher.
 }
 
 // ── Load detail when editing ─────────────────────────────────────────────────

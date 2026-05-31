@@ -27,6 +27,12 @@ import MapBlock from './MapBlock.vue'
 import TimelineBlock from './TimelineBlock.vue'
 import RowBlock from './RowBlock.vue'
 import TextCardBlock from './TextCardBlock.vue'
+import HeroCardsBlock from './HeroCardsBlock.vue'
+import IconListBlock from './IconListBlock.vue'
+import MediaTextBlock from './MediaTextBlock.vue'
+import TabsBlock from './TabsBlock.vue'
+import PostListBlock from './PostListBlock.vue'
+import ImageBlock from './ImageBlock.vue'
 
 type BlockNode = { type: string; props: Record<string, unknown> }
 type MediaInfo = { paths?: { original?: string }; title?: string; alt?: string }
@@ -57,6 +63,12 @@ const registry: Record<string, Component> = {
   timeline: TimelineBlock,
   row: RowBlock,
   textCard: TextCardBlock,
+  heroCards: HeroCardsBlock,
+  iconList: IconListBlock,
+  mediaText: MediaTextBlock,
+  tabs: TabsBlock,
+  postList: PostListBlock,
+  image: ImageBlock,
 }
 
 const fallback = shallowRef(TextBlock)

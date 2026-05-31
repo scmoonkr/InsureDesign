@@ -10,6 +10,12 @@ export const INITIAL_BLOCK_NAMES = [
   'timeline',
   'row',
   'textCard',
+  'heroCards',
+  'iconList',
+  'mediaText',
+  'tabs',
+  'postList',
+  'image',
 ]
 
 // Row layout tokens (mirrors the layout picker UI in BlockInsertModal).
@@ -74,6 +80,16 @@ export const BLOCK_TYPES = {
       text: { type: 'string', required: true },
       url: { type: 'string', required: true },
       style: { type: 'enum', values: ['primary', 'secondary', 'warning'], default: 'primary' },
+    },
+  },
+  image: {
+    label: 'Image (single)',
+    requiresContent: false,
+    options: {
+      imageId: { type: 'imageId', required: true },
+      caption: { type: 'string' },                                        // optional <figcaption>
+      width: { type: 'enum', values: ['normal', 'wide', 'full'], default: 'normal' },
+      link: { type: 'string' },                                           // optional URL — image becomes a link
     },
   },
   gallery: {
@@ -151,6 +167,79 @@ export const BLOCK_TYPES = {
       textColor: { type: 'enum', values: ['dark', 'light'], default: 'dark' },
       // JSON array of { title, description, backgroundColor?, textColor? }
       items: { type: 'json-array', itemType: 'object', required: true, minItems: 1 },
+    },
+  },
+  postList: {
+    label: 'Post List (cards)',
+    requiresContent: false,
+    options: {
+      // Comma-separated slugs. Empty = no filter on that axis.
+      categories: { type: 'string' },
+      tags: { type: 'string' },
+      limit: { type: 'number', default: 6, min: 1, max: 24 },
+      columns: { type: 'enum', values: ['2', '3', '4'], default: '3' },
+      showFeatured: { type: 'enum', values: ['on', 'off'], default: 'on' },
+      showAuthor: { type: 'enum', values: ['on', 'off'], default: 'on' },
+      showDate: { type: 'enum', values: ['on', 'off'], default: 'on' },
+      showExcerpt: { type: 'enum', values: ['on', 'off'], default: 'on' },
+    },
+  },
+  tabs: {
+    label: 'Tabs',
+    requiresContent: false,
+    options: {
+      // JSON array of { label, title?, content? } — label is the tab button text,
+      // title shows large on the left side of the panel, content fills the right side (inline markdown).
+      items: { type: 'json-array', itemType: 'object', required: true, minItems: 1 },
+    },
+  },
+  mediaText: {
+    label: 'Media + Text (alternating)',
+    requiresContent: false,
+    options: {
+      imageFrame: { type: 'enum', values: ['none', 'soft'], default: 'soft' },
+      frameColor: { type: 'color' },                                        // soft frame bg color
+      alternate: { type: 'enum', values: ['on', 'off'], default: 'on' },    // flip image side per row
+      imagePosition: { type: 'enum', values: ['left', 'right'], default: 'left' },   // first row's image side
+      gap: { type: 'enum', values: ['small', 'medium', 'large'], default: 'large' },
+      // JSON array of { imageId, title, description, list: string[] }
+      items: { type: 'json-array', itemType: 'object', required: true, minItems: 1 },
+    },
+  },
+  iconList: {
+    label: 'Icon List',
+    requiresContent: false,
+    options: {
+      columns: { type: 'enum', values: ['1', '2', '3'], default: '2' },
+      gap: { type: 'enum', values: ['small', 'medium', 'large'], default: 'medium' },
+      iconColor: { type: 'color' },                                     // circle background
+      iconTextColor: { type: 'enum', values: ['dark', 'light'], default: 'light' },
+      // JSON array of { icon, title, description }
+      // icon = any short string (emoji, single character, ▲ etc.) shown inside the badge
+      items: { type: 'json-array', itemType: 'object', required: true, minItems: 1 },
+    },
+  },
+  heroCards: {
+    label: 'Hero + Cards',
+    requiresContent: false,
+    allowsContent: true,                           // optional description body under the title
+    options: {
+      eyebrow: { type: 'string' },                 // small overline above title
+      title: { type: 'string', required: true },
+      subtitle: { type: 'string' },
+      imageId: { type: 'imageId' },                // background image
+      backgroundColor: { type: 'color' },          // solid color / fallback
+      align: { type: 'enum', values: ['left', 'center', 'right'], default: 'left' },
+      height: { type: 'enum', values: ['small', 'medium', 'large'], default: 'large' },
+      textColor: { type: 'enum', values: ['dark', 'light'], default: 'light' },
+      buttonText: { type: 'string' },
+      buttonUrl: { type: 'string' },
+      buttonStyle: { type: 'enum', values: ['primary', 'secondary', 'warning'], default: 'primary' },
+      // JSON array of { title, description, backgroundColor?, textColor? }
+      cards: { type: 'json-array', itemType: 'object', required: true, minItems: 1 },
+      cardColumns: { type: 'enum', values: ['2', '3', '4'], default: '3' },
+      cardGap: { type: 'enum', values: ['small', 'medium', 'large'], default: 'medium' },
+      cardOverlap: { type: 'enum', values: ['on', 'off'], default: 'on' },
     },
   },
 }
