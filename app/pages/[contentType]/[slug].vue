@@ -250,15 +250,13 @@ if (error.value) {
 }
 
 .public-content-eyebrow-link {
-  color: inherit;
+  color: #93b8d4;
   text-decoration: none;
-  transition: color 0.15s ease, border-bottom-color 0.15s ease;
-  border-bottom: 1px solid transparent;
+  transition: color 0.15s ease;
 }
 
 .public-content-eyebrow-link:hover {
-  color: var(--theme-fg);
-  border-bottom-color: currentColor;
+  color: #1a6eb8;
 }
 
 .public-content-eyebrow-sep {
@@ -336,18 +334,13 @@ if (error.value) {
 .public-content-tags a {
   display: inline-flex;
   align-items: center;
-  padding: 4px 10px;
-  border: 1px solid var(--theme-line);
-  background: var(--theme-bg);
-  color: var(--theme-fg-dim);
   font-size: 12px;
   text-decoration: none;
-  border-radius: 14px;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  color: #93b8d4;
+  transition: color 0.15s ease;
 }
 .public-content-tags a:hover {
-  border-color: var(--theme-fg-dim);
-  color: var(--theme-fg);
+  color: #1a6eb8;
 }
 
 /* ── 404 ── */
