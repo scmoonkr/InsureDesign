@@ -2019,8 +2019,9 @@ async function handleRequest(req, res) {
 }
 
 const server = http.createServer(handleRequest)
-const { apiPort } = getConfig()
+const { apiPort, uploadDir } = getConfig()
 
 server.listen(apiPort, () => {
   console.log(`CMS API server listening on http://localhost:${apiPort}`)
+  console.log(`Upload directory: ${uploadDir}`)
 })

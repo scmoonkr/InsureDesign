@@ -176,6 +176,16 @@ type MediaItem = {
   description: string
 }
 
+const { navItems } = useBackendMenu()
+
+const config = useRuntimeConfig()
+const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+
+function toAbsUrl(p: string) {
+  if (!p) return ''
+  return p.startsWith('/') ? `${apiBase}${p}` : p
+}
+
 function fromApiItem(item: ApiMediaItem): MediaItem {
   return {
     id: item.id,
@@ -183,16 +193,11 @@ function fromApiItem(item: ApiMediaItem): MediaItem {
     filename: item.originalName,
     type: item.mimeType?.startsWith('video/') ? 'video' : 'image',
     date: item.createdAt?.slice(0, 7) || '',
-    src: item.paths?.original || '',
+    src: toAbsUrl(item.paths?.original || ''),
     caption: item.caption || '',
     description: item.description || '',
   }
 }
-
-const { navItems } = useBackendMenu()
-
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
 
 const isSidebarOpen = ref(false)
 const query = ref('')
