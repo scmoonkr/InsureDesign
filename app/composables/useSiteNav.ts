@@ -33,8 +33,7 @@ function toNav(it: RawItem): NavItem {
 }
 
 export function useSiteNav(location: 'header' | 'footer' | 'sidebar' = 'header') {
-  const config = useRuntimeConfig()
-  const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+  const apiBase = useApiBase()
 
   const { data } = useFetch<{ menu: { items: RawItem[] } | null }>(
     `${apiBase}/api/public/menus/${location}`,

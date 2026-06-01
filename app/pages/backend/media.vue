@@ -181,9 +181,20 @@ const { navItems } = useBackendMenu()
 const config = useRuntimeConfig()
 const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
 
+// Upload paths like /uploads/... must be served by the API server.
+// In production the browser reaches them via the same Apache origin (same-origin,
+// no prefix needed).  In development apiBase is http://localhost:9000 so we
+// extract only the origin (host+port) as the prefix.
 function toAbsUrl(p: string) {
   if (!p) return ''
-  return p.startsWith('/') ? `${apiBase}${p}` : p
+  if (!p.startsWith('/')) return p
+  try {
+    // Works when apiBase is a full URL (dev); no-ops when it's /api (production).
+    const { origin } = new URL(apiBase)
+    return origin !== 'null' ? `${origin}${p}` : p
+  } catch {
+    return p
+  }
 }
 
 function fromApiItem(item: ApiMediaItem): MediaItem {

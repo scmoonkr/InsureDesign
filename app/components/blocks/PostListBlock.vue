@@ -84,8 +84,7 @@ const showAuthor = computed(() => props.block.props?.showAuthor !== 'off')
 const showDate = computed(() => props.block.props?.showDate !== 'off')
 const showExcerpt = computed(() => props.block.props?.showExcerpt !== 'off')
 
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+const apiBase = useApiBase()
 
 const url = computed(() => {
   const p = new URLSearchParams()

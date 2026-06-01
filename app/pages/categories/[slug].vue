@@ -91,8 +91,7 @@ type Response = {
 definePageMeta({ layout: 'default' })
 
 const route = useRoute()
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+const apiBase = useApiBase()
 
 const slug = computed(() => String(route.params.slug || ''))
 const url = computed(

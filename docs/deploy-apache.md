@@ -157,9 +157,23 @@ ALLOWED_ORIGINS=https://insuredesign.co.kr,https://oneminutebible.co.kr
 DEFAULT_SITE_ID=default
 
 # Nuxt (.env)
-# SSR 은 localhost 직접 호출, 브라우저 JS 는 Apache 를 통해 /api/ 로 접근
-NUXT_PUBLIC_API_BASE=http://localhost:9000
+#
+# NUXT_PUBLIC_API_BASE  — 브라우저(클라이언트) JS 가 API 를 호출할 때 사용하는 base.
+#   프로덕션: /api  (same-origin, Apache 가 :9000 으로 프록시)
+#   로컬 개발: http://localhost:9000  (직접 접근)
+NUXT_PUBLIC_API_BASE=/api
+#
+# API_INTERNAL_BASE  — Nuxt SSR(서버) 가 API 서버를 직접 호출할 때 사용하는 base.
+#   프로덕션/개발 공통: http://localhost:9000
+#   NUXT_PUBLIC_API_BASE 와 분리해야 SSR 은 내부망, 브라우저는 Apache 경유가 된다.
+API_INTERNAL_BASE=http://localhost:9000
 ```
+
+> **왜 두 개가 필요한가?**  
+> `NUXT_PUBLIC_API_BASE=http://localhost:9000` 을 하나로 쓰면 SSR 에서는 동작하지만,  
+> 클라이언트 JS 가 브라우저에서 `localhost:9000` 을 호출하려 할 때 사용자 PC 의 9000 포트를  
+> 찾게 되어 연결 실패 → 동적 페이지가 404 처럼 보인다.  
+> F5 를 누르면 SSR 이 다시 실행되므로 정상 렌더링되는 이유가 바로 이 때문이다.
 
 ---
 
@@ -178,11 +192,21 @@ NUXT_PUBLIC_API_BASE=http://localhost:9000
 ### Nuxt SSR 내부 API 요청
 
 ```
-Nuxt SSR plugin (site-theme.ts):
+Nuxt SSR (site-theme plugin, useSiteNav, [slug].vue 등):
+  useApiBase() → config.apiInternalBase → "http://localhost:9000"
   $fetch("http://localhost:9000/api/public/site-config", {
     headers: { "x-site-host": "insuredesign.co.kr" }   ← useRequestHeaders로 전달
   })
   → API server: x-site-host 헤더로 siteId 결정 → "insure"
+```
+
+### 브라우저 클라이언트 내비게이션 API 요청
+
+```
+브라우저 (client-side navigation, useSiteNav re-run 등):
+  useApiBase() → config.public.apiBase → "/api"
+  $fetch("/api/public/menus/header", ...)
+  → 같은 도메인의 /api/ → Apache ProxyPass → localhost:9000
 ```
 
 ---

@@ -4,7 +4,8 @@ export default defineNuxtPlugin(async () => {
 
   if (import.meta.server) {
     try {
-      const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+      const internal = (config.apiInternalBase as string | undefined || '').replace(/\/$/, '')
+      const apiBase = internal || `http://localhost:${config.apiPort || 9000}`
       const { host } = useRequestHeaders(['host'])
       const data = await $fetch<{ theme: string; siteId: string }>(
         `${apiBase}/api/public/site-config`,

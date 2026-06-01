@@ -31,6 +31,10 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     apiPort,
+    // Internal URL used by SSR to call the API server directly (never exposed to browser).
+    // In production set API_INTERNAL_BASE=http://localhost:9000 and NUXT_PUBLIC_API_BASE=/api.
+    // In development both SSR and browser reach localhost:9000, so leave both at default.
+    apiInternalBase: process.env.API_INTERNAL_BASE || `http://localhost:${apiPort}`,
     mongodbAddr: process.env.MONGODB_ADDR,
     mongoUsername: process.env.MONGO_USERNAME,
     mongoPassword: process.env.MONGO_PWD,
