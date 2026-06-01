@@ -48,7 +48,7 @@ export function loadEnv() {
 export function getConfig() {
   return {
     apiPort: Number(process.env.PORT || 9000),
-    apiBase: (process.env.NUXT_PUBLIC_API_BASE || 'http://localhost:9000').replace(/\/$/, ''),
+    apiBase: (process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 9000}`).replace(/\/$/, ''),
     siteUrl: (process.env.SITE_URL || 'http://localhost:9001').replace(/\/$/, ''),
     sessionSecret: process.env.NUXT_SESSION_PASSWORD || process.env.SESSION_SECRET || process.env.JWT_SECRET,
     naverClientId: process.env.NAVER_CLIENT_ID,

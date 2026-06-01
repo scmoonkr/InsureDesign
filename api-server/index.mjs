@@ -1761,12 +1761,18 @@ async function fetchProfile(provider, accessToken) {
 }
 
 async function handleRequest(req, res) {
-  const url = new URL(req.url || '/', getConfig().apiBase)
-
   if (req.method === 'OPTIONS') {
     applyCors(req, res)
     res.writeHead(204)
     res.end()
+    return
+  }
+
+  let url
+  try {
+    url = new URL(req.url || '/', getConfig().apiBase)
+  } catch {
+    sendJson(req, res, 400, { error: 'Bad request' })
     return
   }
 
