@@ -7,8 +7,7 @@ type Site = {
 }
 
 export function useSiteAdmin() {
-  const config = useRuntimeConfig()
-  const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+  const apiBase = useApiBase()
 
   const activeSiteId = useState<string>('adminSiteId', () => '')
 

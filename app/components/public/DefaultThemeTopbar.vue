@@ -129,8 +129,7 @@ const emit = defineEmits<{
 }>()
 
 const logoSrc = '/themes/default/logo.png'
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+const apiBase = useApiBase()
 const authMeUrl = `${apiBase}/api/auth/me`
 const logoutUrl = `${apiBase}/api/auth/logout`
 

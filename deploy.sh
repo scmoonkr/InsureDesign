@@ -19,8 +19,8 @@ pm2 describe CMS-api >/dev/null 2>&1 \
   || pm2 start "$PROJECT_DIR/api-server/index.mjs" --name CMS-api --cwd "$PROJECT_DIR" --update-env
 
 pm2 describe CMS-client >/dev/null 2>&1 \
-  && PORT=9001 pm2 restart CMS-client --update-env \
-  || PORT=9001 pm2 start "$PROJECT_DIR/.output/server/index.mjs" \
+  && NUXT_PUBLIC_API_BASE='' PORT=9001 pm2 restart CMS-client --update-env \
+  || NUXT_PUBLIC_API_BASE='' PORT=9001 pm2 start "$PROJECT_DIR/.output/server/index.mjs" \
        --name CMS-client \
        --cwd "$PROJECT_DIR" \
        --update-env

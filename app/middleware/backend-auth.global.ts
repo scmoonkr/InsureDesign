@@ -22,8 +22,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (!to.path.startsWith('/backend')) return
   if (import.meta.server) return
 
-  const config = useRuntimeConfig()
-  const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+  const apiBase = useApiBase()
 
   let user: MeUser = null
   try {
