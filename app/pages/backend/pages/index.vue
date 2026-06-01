@@ -89,8 +89,7 @@ const LIMIT = 20
 
 const { navItems } = useBackendMenu()
 const { activeSiteId } = useSiteAdmin()
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+const apiBase = useApiBase()
 
 const isSidebarOpen = ref(false)
 const statusFilter = ref('')

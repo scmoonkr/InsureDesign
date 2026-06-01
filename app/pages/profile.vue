@@ -93,8 +93,7 @@ type ProfileUser = {
   dob?: string
 }
 
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+const apiBase = useApiBase()
 const message = ref('')
 const isError = ref(false)
 const isSaving = ref(false)

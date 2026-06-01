@@ -178,8 +178,7 @@ type MediaItem = {
 
 const { navItems } = useBackendMenu()
 
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+const apiBase = useApiBase()
 
 // Upload paths like /uploads/... must be served by the API server.
 // In production the browser reaches them via the same Apache origin (same-origin,

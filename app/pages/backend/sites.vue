@@ -293,8 +293,7 @@ const TABS = [
 const THEMES = themesMeta
 
 const { navItems } = useBackendMenu()
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+const apiBase = useApiBase()
 
 const isSidebarOpen = ref(false)
 const drawerOpen = ref(false)

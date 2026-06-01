@@ -54,8 +54,7 @@ type OwnPost = {
 }
 
 const navItems = useSiteNav('header')
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+const apiBase = useApiBase()
 
 const { data, pending, error } = useFetch<{ items: OwnPost[]; total: number }>(
   `${apiBase}/api/me/contents?type=post&limit=50`,

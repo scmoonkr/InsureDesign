@@ -85,8 +85,7 @@ definePageMeta({
 
 const { navItems } = useBackendMenu()
 const { themeName } = useSiteTheme()
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+const apiBase = useApiBase()
 
 const themeList = themes
 const activeThemeName = computed(() => themeName.value)

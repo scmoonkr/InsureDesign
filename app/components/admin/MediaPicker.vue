@@ -67,8 +67,7 @@ const emit = defineEmits<{
   pick: [ids: string[]]
 }>()
 
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+const apiBase = useApiBase()
 
 const query = ref('')
 const selected = ref<string[]>([])

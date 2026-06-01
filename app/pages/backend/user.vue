@@ -120,8 +120,7 @@ type BackendUser = {
 const { navItems } = useBackendMenu()
 
 const route = useRoute()
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+const apiBase = useApiBase()
 const userId = computed(() => String(route.query.id || ''))
 const message = ref('')
 const isError = ref(false)

@@ -28,8 +28,7 @@ definePageMeta({
 
 const navItems = useSiteNav('header')
 
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+const apiBase = useApiBase()
 
 function authUrl(provider: 'kakao' | 'naver') {
   return `${apiBase}/api/auth/${provider}`

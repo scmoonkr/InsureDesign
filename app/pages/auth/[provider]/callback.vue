@@ -20,8 +20,7 @@ definePageMeta({
 })
 
 const route = useRoute()
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+const apiBase = useApiBase()
 const provider = String(route.params.provider || '')
 const title = ref('Signing you in.')
 const message = ref('Please wait while we finish your login.')

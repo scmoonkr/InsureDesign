@@ -483,8 +483,7 @@ function buildImageBlock(type: string, imageIds: string[]): string {
 // ── Runtime config + API base ────────────────────────────────────────────────
 
 const { activeSiteId } = useSiteAdmin()
-const config = useRuntimeConfig()
-const apiBase = String(config.public.apiBase || '').replace(/\/$/, '')
+const apiBase = useApiBase()
 
 // /api/admin/contents vs /api/me/contents (Stage 2 endpoint)
 const apiContentsBase = computed(() =>
