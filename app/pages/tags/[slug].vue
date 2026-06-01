@@ -133,7 +133,7 @@ const _dynamicFooter = useSiteFooterColumns()
 const footerColumns = computed(() => _dynamicFooter.value.length ? _dynamicFooter.value : _fallbackFooter)
 
 if (error.value) {
-  throw createError({ statusCode: 404, statusMessage: 'Not found', fatal: true })
+  throw createError({ statusCode: 404, statusMessage: 'Not found' })
 }
 
 </script>
