@@ -1,22 +1,28 @@
 // Returns the appropriate API base URL for the current execution context.
 //
+// All pages build API URLs as:  `${apiBase}/api/public/...`
+// So apiBase must be the SERVER ORIGIN only — never a path prefix like "/api".
+//
 // SSR (server-side render): uses the PRIVATE apiInternalBase so the Node.js
 //   process can call the API server directly on localhost without going through
 //   Apache.  Set API_INTERNAL_BASE=http://localhost:9000 in your .env.
+//   → returns "http://localhost:9000"
 //
-// Browser (client-side navigation): uses the PUBLIC apiBase.  In production
-//   this should be the relative path "/api" so the browser's request goes to
-//   the same origin and Apache proxies it to the API server.
-//   Set NUXT_PUBLIC_API_BASE=/api in your production .env.
+// Browser (client-side navigation): uses the PUBLIC apiBase.
+//   Production: leave NUXT_PUBLIC_API_BASE unset (or set to "").
+//     → returns "" (empty string), so URLs become "/api/public/..." (same-origin)
+//     → Apache ProxyPass /api/ → localhost:9000/api/ handles the routing.
+//   Development: set NUXT_PUBLIC_API_BASE=http://localhost:9000
+//     → returns "http://localhost:9000" (developer's browser can reach it directly)
 //
-// Development: leave both at their defaults (http://localhost:9000).  The
-//   developer's browser can directly reach localhost:9000, so the relative-URL
-//   split is not needed.
+// IMPORTANT: do NOT set NUXT_PUBLIC_API_BASE=/api in production.
+//   That would produce double-prefix URLs like /api/api/public/...
 export function useApiBase(): string {
   const config = useRuntimeConfig()
   if (import.meta.server) {
     const internal = (config.apiInternalBase as string | undefined || '').replace(/\/$/, '')
     return internal || `http://localhost:${config.apiPort || 9000}`
   }
-  return String(config.public.apiBase || '/api').replace(/\/$/, '')
+  // Use ?? (not ||) so that an explicitly empty NUXT_PUBLIC_API_BASE stays empty.
+  return String(config.public.apiBase ?? '').replace(/\/$/, '')
 }

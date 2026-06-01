@@ -46,7 +46,10 @@ export default defineNuxtConfig({
     sessionSecret: process.env.NUXT_SESSION_PASSWORD || process.env.SESSION_SECRET,
     uploadDir: process.env.UPLOAD_DIR || 'uploads',
     public: {
-      apiBase: process.env.NUXT_PUBLIC_API_BASE || '/api',
+      // Empty string = same-origin browser requests ("/api/public/…").
+      // In development set NUXT_PUBLIC_API_BASE=http://localhost:9000.
+      // Never set this to "/api" in production — that creates double-prefix URLs.
+      apiBase: process.env.NUXT_PUBLIC_API_BASE ?? '',
       siteUrl: process.env.SITE_URL || process.env.NUXT_SITE_URL || '',
     },
   },
