@@ -14,7 +14,7 @@ import { getSiteConfig, updateSiteTheme, getSiteSettings, updateSiteSettings } f
 import { listSites, getSiteById, getSiteByDomain, createSite, updateSite, addDomain, removeDomain } from './sites-service.mjs'
 import { resolvePublicSiteId, getAdminSiteId, checkAdmin, checkSession, isSuperUser } from './middleware.mjs'
 import { listContents, getContentById, createContent, updateContent, listPublicContents, getPublicContentBySlug, titleToSlug, collectImageIds, previewMarkdown, listOwnContents, getOwnContentById, createOwnContent, updateOwnContent } from './contents-service.mjs'
-import { listCategories, createCategory, updateCategory, deleteCategory, getCategoryBySlug } from './categories-service.mjs'
+import { listCategories, createCategory, updateCategory, deleteCategory, getCategoryBySlug, getCategoriesByIds } from './categories-service.mjs'
 import { listTags, findOrCreateTagsByNames, getTagBySlug, getTagsByIds } from './tags-service.mjs'
 import { listMenus, createMenu, updateMenu, deleteMenu } from './menus-service.mjs'
 
@@ -1258,7 +1258,7 @@ async function handlePublicCategoryPage(req, res, url, slug) {
     db.collection('contents').find(filter, {
       projection: {
         title: 1, slug: 1, summary: 1, contentType: 1, publishedAt: 1, updatedAt: 1,
-        thumbnailImageId: 1, authorId: 1, meta: 1,
+        thumbnailImageId: 1, authorId: 1, meta: 1, categoryIds: 1, tagIds: 1,
       },
     })
       .sort({ publishedAt: -1, updatedAt: -1 })
@@ -1267,15 +1267,23 @@ async function handlePublicCategoryPage(req, res, url, slug) {
     db.collection('contents').countDocuments(filter),
   ])
 
-  // Batch lookup thumbnails + authors
+  // Batch lookup thumbnails + authors + categories + tags
   const thumbIds = new Set()
   const authorIds = new Set()
+  const allCategoryIds = new Set()
+  const allTagIds = new Set()
   for (const d of docs) {
     if (d.thumbnailImageId) thumbIds.add(String(d.thumbnailImageId))
     if (d.authorId) authorIds.add(String(d.authorId))
+    for (const id of d.categoryIds || []) allCategoryIds.add(String(id))
+    for (const id of d.tagIds || []) allTagIds.add(String(id))
   }
 
-  const mediaMap = thumbIds.size ? await getMediaByIds(siteId, [...thumbIds]) : {}
+  const [mediaMap, categoryDocs, tagDocs] = await Promise.all([
+    thumbIds.size ? getMediaByIds(siteId, [...thumbIds]) : Promise.resolve({}),
+    allCategoryIds.size ? getCategoriesByIds(siteId, [...allCategoryIds]) : Promise.resolve([]),
+    allTagIds.size ? getTagsByIds(siteId, [...allTagIds]) : Promise.resolve([]),
+  ])
   const authorMap = {}
   if (authorIds.size) {
     const authors = await db.collection('users').find(
@@ -1290,6 +1298,9 @@ async function handlePublicCategoryPage(req, res, url, slug) {
       }
     }
   }
+
+  const categoryLookup = Object.fromEntries(categoryDocs.map(c => [c.id, c]))
+  const tagLookup = Object.fromEntries(tagDocs.map(t => [t.id, t]))
 
   const { apiBase } = getConfig()
   for (const id of Object.keys(mediaMap)) {
@@ -1310,6 +1321,8 @@ async function handlePublicCategoryPage(req, res, url, slug) {
     thumbnailImageId: d.thumbnailImageId ? String(d.thumbnailImageId) : null,
     authorId: d.authorId ? String(d.authorId) : null,
     meta: d.meta || {},
+    categoryLabels: (d.categoryIds || []).map(id => categoryLookup[String(id)]).filter(Boolean),
+    tagLabels: (d.tagIds || []).map(id => tagLookup[String(id)]).filter(Boolean),
   }))
 
   sendJson(req, res, 200, { category, items, total, mediaMap, authorMap })
@@ -1339,7 +1352,7 @@ async function handlePublicTagPage(req, res, url, slug) {
     db.collection('contents').find(filter, {
       projection: {
         title: 1, slug: 1, summary: 1, contentType: 1, publishedAt: 1, updatedAt: 1,
-        thumbnailImageId: 1, authorId: 1, meta: 1,
+        thumbnailImageId: 1, authorId: 1, meta: 1, categoryIds: 1, tagIds: 1,
       },
     })
       .sort({ publishedAt: -1, updatedAt: -1 })
@@ -1350,12 +1363,20 @@ async function handlePublicTagPage(req, res, url, slug) {
 
   const thumbIds = new Set()
   const authorIds = new Set()
+  const allCategoryIds = new Set()
+  const allTagIds = new Set()
   for (const d of docs) {
     if (d.thumbnailImageId) thumbIds.add(String(d.thumbnailImageId))
     if (d.authorId) authorIds.add(String(d.authorId))
+    for (const id of d.categoryIds || []) allCategoryIds.add(String(id))
+    for (const id of d.tagIds || []) allTagIds.add(String(id))
   }
 
-  const mediaMap = thumbIds.size ? await getMediaByIds(siteId, [...thumbIds]) : {}
+  const [mediaMap, categoryDocs, tagDocs] = await Promise.all([
+    thumbIds.size ? getMediaByIds(siteId, [...thumbIds]) : Promise.resolve({}),
+    allCategoryIds.size ? getCategoriesByIds(siteId, [...allCategoryIds]) : Promise.resolve([]),
+    allTagIds.size ? getTagsByIds(siteId, [...allTagIds]) : Promise.resolve([]),
+  ])
   const authorMap = {}
   if (authorIds.size) {
     const authors = await db.collection('users').find(
@@ -1370,6 +1391,9 @@ async function handlePublicTagPage(req, res, url, slug) {
       }
     }
   }
+
+  const categoryLookup = Object.fromEntries(categoryDocs.map(c => [c.id, c]))
+  const tagLookup = Object.fromEntries(tagDocs.map(t => [t.id, t]))
 
   const { apiBase } = getConfig()
   for (const id of Object.keys(mediaMap)) {
@@ -1390,6 +1414,8 @@ async function handlePublicTagPage(req, res, url, slug) {
     thumbnailImageId: d.thumbnailImageId ? String(d.thumbnailImageId) : null,
     authorId: d.authorId ? String(d.authorId) : null,
     meta: d.meta || {},
+    categoryLabels: (d.categoryIds || []).map(id => categoryLookup[String(id)]).filter(Boolean),
+    tagLabels: (d.tagIds || []).map(id => tagLookup[String(id)]).filter(Boolean),
   }))
 
   sendJson(req, res, 200, { tag, items, total, mediaMap, authorMap })

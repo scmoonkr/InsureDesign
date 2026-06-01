@@ -29,6 +29,16 @@
               </div>
             </div>
             <div class="category-card-body">
+              <!-- Categories above title -->
+              <p v-if="item.categoryLabels?.length" class="category-card-cats">
+                <NuxtLink
+                  v-for="c in item.categoryLabels"
+                  :key="c.id"
+                  :to="`/categories/${c.slug}`"
+                  class="category-card-label"
+                  @click.prevent.stop="navigateTo(`/categories/${c.slug}`)"
+                >{{ c.name }}</NuxtLink>
+              </p>
               <h2 class="category-card-title">{{ item.title }}</h2>
               <p class="category-card-meta">
                 <img
@@ -41,6 +51,16 @@
                 <span v-if="item.publishedAt">{{ formatRelativeDate(item.publishedAt) }}</span>
               </p>
               <p v-if="item.summary" class="category-card-excerpt">{{ item.summary }}</p>
+              <!-- Tags below excerpt -->
+              <div v-if="item.tagLabels?.length" class="category-card-tags">
+                <NuxtLink
+                  v-for="t in item.tagLabels"
+                  :key="t.id"
+                  :to="`/tags/${t.slug}`"
+                  class="category-card-tag"
+                  @click.prevent.stop="navigateTo(`/tags/${t.slug}`)"
+                >#{{ t.name }}</NuxtLink>
+              </div>
             </div>
           </NuxtLink>
         </section>
@@ -67,6 +87,7 @@ import DefaultThemeTopbar from '~/components/public/DefaultThemeTopbar.vue'
 import DefaultThemeFooter from '~/components/public/DefaultThemeFooter.vue'
 
 type Tag = { id: string; name: string; slug: string; usageCount?: number }
+type LabelRef = { id: string; name: string; slug: string }
 type MediaInfo = { paths?: { original?: string }; title?: string; alt?: string }
 type AuthorInfo = { id: string; name: string; avatarUrl?: string }
 type Item = {
@@ -79,6 +100,8 @@ type Item = {
   thumbnailImageId?: string | null
   authorId?: string | null
   meta?: { featured?: boolean }
+  categoryLabels?: LabelRef[]
+  tagLabels?: LabelRef[]
 }
 type Response = {
   tag: Tag
@@ -173,13 +196,20 @@ if (error.value) {
   color: var(--theme-fg-dim);
 }
 
-/* ── Card grid ── */
+/* ── Card grid: 4 / 2 / 1 ── */
 .category-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 28px;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 24px;
 }
 
+@media (max-width: 1024px) {
+  .category-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ── Card ── */
 .category-card {
   display: flex;
   flex-direction: column;
@@ -221,18 +251,43 @@ if (error.value) {
 }
 
 .category-card-body {
-  padding: 18px 20px 22px;
+  padding: 14px 16px 18px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
   flex: 1;
+}
+
+/* Categories above title */
+.category-card-cats {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.category-card-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--theme-accent, var(--theme-fg-dim));
+  text-decoration: none;
+  padding: 2px 6px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  line-height: 1.4;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.category-card-label:hover {
+  background: var(--theme-accent, var(--theme-fg-dim));
+  color: var(--theme-bg);
 }
 
 .category-card-title {
   margin: 0;
   font-family: var(--theme-serif, var(--theme-sans));
-  font-size: 19px;
-  line-height: 1.3;
+  font-size: 15px;
+  line-height: 1.35;
   letter-spacing: -0.005em;
   font-weight: 600;
   display: -webkit-box;
@@ -244,34 +299,56 @@ if (error.value) {
 .category-card-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   margin: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--theme-fg-dim);
 }
 .category-card-meta span + span::before {
   content: '·';
-  margin: 0 4px;
+  margin: 0 3px;
   color: var(--theme-fg-faint);
 }
 .category-card-avatar {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   object-fit: cover;
-  margin-right: 4px;
+  margin-right: 3px;
   flex-shrink: 0;
 }
 
 .category-card-excerpt {
-  margin: 4px 0 0;
-  font-size: 13.5px;
+  margin: 0;
+  font-size: 12px;
   line-height: 1.55;
   color: var(--theme-fg-dim);
   display: -webkit-box;
-  -webkit-line-clamp: 3;
+  -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+/* Tags below excerpt */
+.category-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 2px;
+}
+.category-card-tag {
+  font-size: 10px;
+  color: var(--theme-fg-dim);
+  text-decoration: none;
+  padding: 2px 7px;
+  background: var(--theme-bg-soft);
+  border-radius: 10px;
+  transition: background 0.15s ease, color 0.15s ease;
+  line-height: 1.5;
+}
+.category-card-tag:hover {
+  background: var(--theme-line);
+  color: var(--theme-fg);
 }
 
 /* ── Empty / 404 ── */
@@ -302,7 +379,7 @@ if (error.value) {
   }
   .category-grid {
     grid-template-columns: 1fr;
-    gap: 20px;
+    gap: 16px;
   }
 }
 </style>

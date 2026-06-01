@@ -158,6 +158,20 @@ export async function updateCategory(id, siteId, fields, userId) {
   return serializeCategory(result)
 }
 
+export async function getCategoriesByIds(siteId, ids) {
+  if (!Array.isArray(ids) || !ids.length) return []
+  const db = await getMongoDb()
+  const objectIds = ids
+    .map(v => (v instanceof ObjectId ? v : (typeof v === 'string' && ObjectId.isValid(v) ? new ObjectId(v) : null)))
+    .filter(Boolean)
+  if (!objectIds.length) return []
+  const docs = await db.collection('categories')
+    .find({ _id: { $in: objectIds }, siteId, isDeleted: { $ne: true } })
+    .project({ name: 1, slug: 1 })
+    .toArray()
+  return docs.map(d => ({ id: String(d._id), name: d.name, slug: d.slug }))
+}
+
 export async function deleteCategory(id, siteId, userId) {
   if (!ObjectId.isValid(id)) return { ok: false, reason: 'invalid' }
   const db = await getMongoDb()
