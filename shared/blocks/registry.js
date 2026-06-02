@@ -16,6 +16,8 @@ export const INITIAL_BLOCK_NAMES = [
   'tabs',
   'postList',
   'image',
+  // ── site-specific custom blocks ──
+  'insuranceCalculator',
 ]
 
 // Row layout tokens (mirrors the layout picker UI in BlockInsertModal).
@@ -240,6 +242,19 @@ export const BLOCK_TYPES = {
       cardColumns: { type: 'enum', values: ['2', '3', '4'], default: '3' },
       cardGap: { type: 'enum', values: ['small', 'medium', 'large'], default: 'medium' },
       cardOverlap: { type: 'enum', values: ['on', 'off'], default: 'on' },
+    },
+  },
+
+  // ── site-specific custom blocks ──────────────────────────────
+  insuranceCalculator: {
+    label: '보험료 계산기',
+    requiresContent: false,
+    options: {
+      title:       { type: 'string' },
+      subtitle:    { type: 'string' },
+      consultUrl:  { type: 'string' },
+      defaultAge:  { type: 'number', min: 15, max: 70, default: 30 },
+      defaultType: { type: 'enum', values: ['life', 'term', 'health', 'cancer'], default: 'life' },
     },
   },
 }
