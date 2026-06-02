@@ -115,18 +115,6 @@
         <div v-if="isPost" class="theme-form-field">
           <span>Tags</span>
           <input v-model="form.tagNamesInput" placeholder="콤마로 구분 (예: 공지, 행사, 2026)" />
-          <div v-if="isAdmin && existingTagList.length" class="theme-backend-posts-tagchips">
-            <button
-              v-for="t in existingTagList"
-              :key="t.id"
-              type="button"
-              class="theme-backend-posts-tagchip"
-              @click="addTagName(t.name)"
-            >
-              {{ t.name }}
-              <span v-if="t.usageCount" class="theme-meta">{{ t.usageCount }}</span>
-            </button>
-          </div>
         </div>
 
         <!-- PAGE: Parent page (admin only) -->
@@ -403,6 +391,8 @@ const BLOCK_OPTIONS = [
   { value: 'mediaText', label: 'Media + Text (alternating)' },
   { value: 'tabs', label: 'Tabs' },
   { value: 'postList', label: 'Post List (categories / tags)' },
+  // ── insure 전용 ──
+  { value: 'insuranceCalculator', label: '보험료 계산기 (insure)' },
 ]
 
 const TEMPLATE_OPTIONS = [
