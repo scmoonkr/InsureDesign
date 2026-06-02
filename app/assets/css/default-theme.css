@@ -814,6 +814,9 @@
 }
 
 .theme-form-submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: 46px;
   min-width: 150px;
   border: 1px solid var(--theme-fg);
@@ -1004,7 +1007,7 @@
 
 .theme-backend-head {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 24px;
   padding-bottom: 12px;
@@ -3271,6 +3274,17 @@
   padding: 0 14px;
 }
 
+/* 커스텀 블록 섹션 — 일반 Block 삽입과 시각적으로 구분 */
+.custom-block-field {
+  border-left: 3px solid #1a6eb8;
+  padding-left: 10px;
+  margin-left: -13px;
+}
+.custom-block-field > span {
+  color: #1a6eb8 !important;
+  font-weight: 600;
+}
+
 /* Row layout inline picker (above Block 삽입) — one-click insert */
 .theme-backend-posts-row-grid {
   display: grid;
@@ -4708,7 +4722,7 @@
 
 .theme-backend-contents-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;

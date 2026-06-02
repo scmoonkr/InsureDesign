@@ -74,7 +74,7 @@
           </div>
         </div>
 
-        <!-- Block insert -->
+        <!-- Block insert — 일반 블록 -->
         <div class="theme-form-field">
           <span>Block 삽입</span>
           <div class="theme-backend-posts-block-row">
@@ -94,6 +94,25 @@
               class="theme-form-submit theme-form-submit-secondary-soft"
               :disabled="!blockToInsert"
               @click="insertBlock"
+            >Insert</button>
+          </div>
+        </div>
+
+        <!-- Block insert — 커스텀 블록 -->
+        <div class="theme-form-field custom-block-field">
+          <span>커스텀 블록</span>
+          <div class="theme-backend-posts-block-row">
+            <select v-model="customBlockToInsert">
+              <option value="">— 커스텀 블록 선택 —</option>
+              <option v-for="b in CUSTOM_BLOCK_OPTIONS" :key="b.value" :value="b.value">
+                {{ b.label }} <template v-if="b.site">({{ b.site }})</template>
+              </option>
+            </select>
+            <button
+              type="button"
+              class="theme-form-submit theme-form-submit-secondary-soft"
+              :disabled="!customBlockToInsert"
+              @click="insertCustomBlock"
             >Insert</button>
           </div>
         </div>
@@ -391,8 +410,11 @@ const BLOCK_OPTIONS = [
   { value: 'mediaText', label: 'Media + Text (alternating)' },
   { value: 'tabs', label: 'Tabs' },
   { value: 'postList', label: 'Post List (categories / tags)' },
-  // ── insure 전용 ──
-  { value: 'insuranceCalculator', label: '보험료 계산기 (insure)' },
+]
+
+// 사이트 전용 커스텀 블록 — 일반 블록과 별도 UI 섹션에 표시
+const CUSTOM_BLOCK_OPTIONS = [
+  { value: 'insuranceCalculator', label: '보험료 계산기', site: 'insure' },
 ]
 
 const TEMPLATE_OPTIONS = [
@@ -455,6 +477,8 @@ const TEXT_TEMPLATES: Record<string, string> = {
   iconList: `:::iconList\ncolumns: 2\ngap: medium\niconColor: #3d7e7c\niconTextColor: light\nitems: ${JSON.stringify(ICONLIST_PLACEHOLDER)}\n:::`,
   mediaText: `:::mediaText\nimageFrame: soft\nframeColor: #d8efe5\nalternate: on\nimagePosition: left\ngap: large\nitems: ${JSON.stringify(MEDIATEXT_PLACEHOLDER)}\n:::`,
   tabs: `:::tabs\nitems: ${JSON.stringify(TABS_PLACEHOLDER)}\n:::`,
+  // ── 커스텀 블록 ──
+  insuranceCalculator: `:::insuranceCalculator\ntitle: 보험료 계산기\nsubtitle: 간단한 정보 입력만으로 예상 보험료를 확인하세요.\ndefaultAge: 30\ndefaultType: life\n:::`,
 }
 
 function buildImageBlock(type: string, imageIds: string[]): string {
@@ -490,6 +514,7 @@ const isDeleting = ref(false)
 const isError = ref(false)
 const message = ref('')
 
+const customBlockToInsert = ref('')
 const markdownRef = ref<HTMLTextAreaElement | null>(null)
 const featuredFileRef = ref<HTMLInputElement | null>(null)
 const featuredUploading = ref(false)
@@ -720,6 +745,16 @@ function insertBlock() {
   }
   blockModalCursor.value = ta?.selectionStart ?? form.markdown.length
   blockModalOpen.value = true
+}
+
+function insertCustomBlock() {
+  const key = customBlockToInsert.value
+  if (!key) return
+  const ta = markdownRef.value
+  const cursor = ta?.selectionStart ?? form.markdown.length
+  if (ta) ta.setSelectionRange(cursor, cursor)
+  insertAtCursor(TEXT_TEMPLATES[key] ?? `:::${key}\n:::`)
+  customBlockToInsert.value = ''
 }
 
 function insertRowLayout(layout: string) {
