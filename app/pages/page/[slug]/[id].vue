@@ -6,10 +6,7 @@
         <span class="ip-bar-title">{{ pageTitle }}</span>
       </div>
       <div class="ip-bar-right">
-        <button v-if="canEdit" type="button" class="ip-btn ip-btn-secondary" @click="goEdit">편집</button>
-        <button v-if="record?.analysisResult" type="button" class="ip-btn ip-btn-primary" @click="openProposal">
-          제안서 보기 ▶
-        </button>
+        <button type="button" class="ip-btn ip-btn-primary" @click="print">🖨 인쇄</button>
       </div>
     </div>
 
@@ -43,16 +40,13 @@ const viewport  = ref<HTMLElement | null>(null)
 const pending   = ref(true)
 const loadError = ref('')
 const record    = ref<any>(null)
-const canEdit   = ref(false)
-
 const pageTitle = computed(() =>
   record.value
     ? `${record.value.customerName || ''} · ${record.value.title || '보험 설계서'}`
     : '보험 설계서',
 )
 
-function goEdit() { navigateTo('/backend/analysis') }
-function openProposal() { window.open(`/analysis?id=${id}`, '_blank') }
+function print() { window.print() }
 
 onMounted(async () => {
   try {
@@ -62,8 +56,7 @@ onMounted(async () => {
     const item = res?.item
     if (!item) { loadError.value = '설계서를 찾을 수 없습니다'; pending.value = false; return }
 
-    record.value  = item
-    canEdit.value = true
+    record.value = item
 
     let data: any
     if (item.proposalData) {
