@@ -22,6 +22,13 @@ export const INITIAL_BLOCK_NAMES = [
   'insuranceAnalysis',
 ]
 
+// access 옵션은 모든 블록에서 사용 가능한 범용 옵션입니다.
+// BlockRenderer가 이 값을 읽어 BlockAccessGuard로 렌더를 제어합니다.
+// 예: :::text\naccess: member\n:::
+export const ACCESS_OPTION = {
+  access: { type: 'enum', values: ['public', 'member', 'manager', 'admin'], default: 'public' },
+}
+
 // Row layout tokens (mirrors the layout picker UI in BlockInsertModal).
 // Each token splits on '-' into a list of column weights; the number of weights
 // = the number of columns the row must contain. Arranged to fit a 4×3 picker.

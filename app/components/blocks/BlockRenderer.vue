@@ -1,12 +1,16 @@
 <template>
   <div class="block-renderer">
-    <component
+    <BlockAccessGuard
       v-for="(block, i) in blocks"
       :key="i"
-      :is="resolve(block.type)"
-      :block="block"
-      :media-map="mediaMap"
-    />
+      :access="(block.props?.access as string | undefined)"
+    >
+      <component
+        :is="resolve(block.type)"
+        :block="block"
+        :media-map="mediaMap"
+      />
+    </BlockAccessGuard>
   </div>
 </template>
 
@@ -33,6 +37,7 @@ import MediaTextBlock from './MediaTextBlock.vue'
 import TabsBlock from './TabsBlock.vue'
 import PostListBlock from './PostListBlock.vue'
 import ImageBlock from './ImageBlock.vue'
+import BlockAccessGuard from './BlockAccessGuard.vue'
 import InsuranceCalculatorBlock from './insurance/InsuranceCalculatorBlock.vue'
 import InsurancePlanningBlock from './insurance/InsurancePlanning.vue'
 import InsuranceAnalysisBlock from './insurance/InsuranceAnalysisBlock.vue'

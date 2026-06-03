@@ -108,12 +108,35 @@
                 {{ b.label }} <template v-if="b.site">({{ b.site }})</template>
               </option>
             </select>
+            <select v-model="customBlockAccess" style="width:100px">
+              <option value="public">공개</option>
+              <option value="member">member</option>
+              <option value="manager">manager</option>
+              <option value="admin">admin</option>
+            </select>
             <button
               type="button"
               class="theme-form-submit theme-form-submit-secondary-soft"
               :disabled="!customBlockToInsert"
               @click="insertCustomBlock"
             >Insert</button>
+          </div>
+        </div>
+
+        <!-- 접근 제어 (일반 블록용) -->
+        <div class="theme-form-field">
+          <span>🔒 접근 제어</span>
+          <div class="theme-backend-posts-block-row">
+            <select v-model="accessInsertLevel" style="width:110px">
+              <option value="member">member</option>
+              <option value="manager">manager</option>
+              <option value="admin">admin</option>
+            </select>
+            <button
+              type="button"
+              class="theme-form-submit theme-form-submit-secondary-soft"
+              @click="insertAccess"
+            >삽입</button>
           </div>
         </div>
 
@@ -519,6 +542,8 @@ const isError = ref(false)
 const message = ref('')
 
 const customBlockToInsert = ref('')
+const customBlockAccess   = ref('public')
+const accessInsertLevel   = ref('member')
 const markdownRef = ref<HTMLTextAreaElement | null>(null)
 const featuredFileRef = ref<HTMLInputElement | null>(null)
 const featuredUploading = ref(false)
@@ -757,8 +782,17 @@ function insertCustomBlock() {
   const ta = markdownRef.value
   const cursor = ta?.selectionStart ?? form.markdown.length
   if (ta) ta.setSelectionRange(cursor, cursor)
-  insertAtCursor(TEXT_TEMPLATES[key] ?? `:::${key}\n:::`)
+  const base = TEXT_TEMPLATES[key] ?? `:::${key}\n:::`
+  const withAccess = customBlockAccess.value !== 'public'
+    ? base.replace(/^(:::\w+)/, `$1\naccess: ${customBlockAccess.value}`)
+    : base
+  insertAtCursor(withAccess)
   customBlockToInsert.value = ''
+  customBlockAccess.value   = 'public'
+}
+
+function insertAccess() {
+  insertAtCursor(`access: ${accessInsertLevel.value}\n`)
 }
 
 function insertRowLayout(layout: string) {
