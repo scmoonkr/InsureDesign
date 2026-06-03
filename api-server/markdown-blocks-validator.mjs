@@ -107,10 +107,19 @@ export function validateParsedBlocks(nodes, { allowedBlocks, pathPrefix = '' } =
   return errors
 }
 
+const VALID_ACCESS_VALUES = ['public', 'member', 'manager', 'admin']
+
 function checkProps(node, spec) {
   if (spec.requiresContent) {
     const c = node.props?.content
     if (typeof c !== 'string' || !c.trim()) return '본문 내용이 비어 있습니다.'
+  }
+  // access는 모든 블록에서 사용 가능한 범용 옵션
+  const access = node.props?.access
+  if (access !== undefined && access !== '') {
+    if (!VALID_ACCESS_VALUES.includes(access)) {
+      return `옵션 'access'은 ${VALID_ACCESS_VALUES.join(' | ')} 중 하나여야 합니다.`
+    }
   }
   for (const [key, def] of Object.entries(spec.options || {})) {
     const v = node.props?.[key]
