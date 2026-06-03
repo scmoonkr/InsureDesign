@@ -265,6 +265,14 @@ export const BLOCK_TYPES = {
       id: { type: 'string', required: true },
     },
   },
+
+  insuranceAnalysis: {
+    label: '보험 설계 관리',
+    requiresContent: false,
+    options: {
+      title: { type: 'string' },
+    },
+  },
 }
 
 export function isAllowedBlock(name, siteAllowed) {
