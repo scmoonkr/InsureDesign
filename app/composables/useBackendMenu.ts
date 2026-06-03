@@ -16,6 +16,7 @@ export function useBackendMenu() {
     { key: 'theme', label: 'Theme', to: '/backend/theme' },
     { key: 'sites', label: 'Sites', to: '/backend/sites' },
     { key: 'foundation', label: 'Foundation', to: '/backend/foundation' },
+    { key: 'analysis', label: 'Insurance Analysis', to: '/backend/analysis' },
   ]
 
   return { navItems, menuItems }

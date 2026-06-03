@@ -1,12 +1,12 @@
 <template>
   <div class="ia-shell">
-    <!-- 개발용 컨트롤 바 (프로덕션에서 제거 가능) -->
     <div class="ia-bar">
       <span class="ia-bar-title">{{ data.title }}</span>
-      <span class="ia-bar-meta">{{ data.customer.name }} · {{ data.customer.age }}세 · {{ data.totalPages }}p</span>
+      <span class="ia-bar-meta">{{ data.customer?.name }} · {{ data.customer?.age }}세 · {{ data.pages?.length }}p</span>
     </div>
 
-    <!-- 원본 HTML과 동일한 viewport -->
+    <div v-if="generateError" class="ia-error">{{ generateError }}</div>
+
     <div ref="viewport" class="viewport" id="viewport" />
   </div>
 </template>
@@ -14,9 +14,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { renderProposal } from './insuranceRenderer.js'
-import blueprintData from './blueprint_pages_v2.json'
-import openingPages from './opening.json'
-import existingAnalysisPages from './existingAnalysis.json'
+import { buildProposalFromAnalysis } from './buildProposalFromAnalysis.js'
+import blueprintData from './planning2_analysis.json'
+import openningData from './opening.json'
 
 definePageMeta({ layout: 'default' })
 
@@ -35,28 +35,48 @@ useHead({
   ],
 })
 
-// 각 JSON 파일을 합산 후 pageNo 순 정렬
-// opening.json            → p1, p2  (고정)
-// existingAnalysis.json   → p3, p4  (기존보험 있을 때만, 없으면 빈 배열)
-// blueprint_pages_v2.json → p5~     (LLM 생성, 보험사 수에 따라 가변)
-const bp = blueprintData as any
-const mergedPages = [
-  ...(openingPages as any[]),
-  ...(existingAnalysisPages as any[]),
-  ...(bp.pages as any[]),
-].sort((a: any, b: any) => a.pageNo - b.pageNo)
+const route = useRoute()
+const apiBase = useApiBase()
 
-const data = {
-  ...bp,
-  totalPages: mergedPages.length,  // 실제 페이지 수로 자동 계산
-  pages: mergedPages,
-}
+// 정적 데이터 (fallback)
+const staticAllPages = [...(openningData as any[]), ...(blueprintData as any).pages]
+  .sort((a: any, b: any) => (a.pageNo || 0) - (b.pageNo || 0))
+const staticData = { ...(blueprintData as any), pages: staticAllPages }
 
+const data = ref<any>(staticData)
 const viewport = ref<HTMLElement | null>(null)
+const generateError = ref('')
 
-onMounted(() => {
-  if (viewport.value) {
-    renderProposal(data, viewport.value)
+onMounted(async () => {
+  if (!viewport.value) return
+
+  const id = route.query.id as string | undefined
+  if (!id) {
+    renderProposal(data.value, viewport.value)
+    return
+  }
+
+  try {
+    const res = await $fetch<{ item: any }>(`${apiBase}/api/analysis/${id}`, {
+      credentials: 'include',
+    })
+    const item = res?.item
+
+    if (item?.proposalData) {
+      // 저장된 proposalData가 있으면 바로 렌더
+      data.value = item.proposalData
+    } else if (item?.analysisResult) {
+      // analysisResult → proposalData 형식으로 즉시 변환 (LLM 호출 없음)
+      data.value = buildProposalFromAnalysis(item.analysisResult, {
+        customerName: item.customerName,
+        agentName:    item.agentName,
+      })
+    }
+    // 그 외엔 정적 fallback 유지
+
+    renderProposal(data.value, viewport.value)
+  } catch {
+    renderProposal(data.value, viewport.value)
   }
 })
 </script>
@@ -66,6 +86,15 @@ onMounted(() => {
 .ia-shell {
   background: var(--bg-outer, #E8D6B4);
   min-height: 100vh;
+}
+
+.ia-error {
+  padding: 16px 24px;
+  background: #fdecea;
+  color: #b71c1c;
+  font-family: sans-serif;
+  font-size: 14px;
+  text-align: center;
 }
 
 /* ── 개발용 컨트롤 바 ─────────────────────────────────── */

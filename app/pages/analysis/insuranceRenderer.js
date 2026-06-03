@@ -242,7 +242,7 @@ const RENDERERS = {
             h('div', { class: 'k' }, 'Contractor'),
             h('div', { class: 'v' }, data.customer.contractor),
             h('div', { class: 'k' }, 'Carriers'),
-            h('div', { class: 'v' }, '흥국화재 · 라이나생명 · KB손해보험 · 한화생명'),
+            h('div', { class: 'v' }, getCompaniesInOrder(data).join(' · ')),
           ]),
         ]),
       ]),
@@ -590,6 +590,26 @@ function familyProtectionSVG(co) {
     </svg>`
 }
 
+// ─── Company order helper ─────────────────────────────────────────────────────
+function getCompaniesInOrder(data) {
+  for (const p of (data.pages || [])) {
+    if (p.type === 'companyPuzzleOverview') {
+      const pieces = [...(p.body?.pieces || [])].sort((a, b) => (a.order || 0) - (b.order || 0))
+      if (pieces.length) return pieces.map(pc => pc.company)
+    }
+  }
+  const seen = [], names = Object.keys(COMPANY_COLORS)
+  for (const p of (data.pages || [])) {
+    if (p.type === 'companyDetail') {
+      const tText = (p.title?.text) || ''
+      for (const n of names) {
+        if (!seen.includes(n) && tText.includes(n)) seen.push(n)
+      }
+    }
+  }
+  return seen.length ? seen : names
+}
+
 // ─── Page assembly ────────────────────────────────────────────────────────────
 // pageNum: 실제 렌더링 순번 (1-based), total: 전체 페이지 수
 function renderPage(page, data, pageNum, total) {
@@ -612,7 +632,7 @@ function renderPage(page, data, pageNum, total) {
 export function renderProposal(data, viewportEl) {
   if (!viewportEl) return
   viewportEl.innerHTML = ''
-  const total = data.totalPages || data.pages.length
+  const total = data.pages.length
   // pageNo 순 정렬은 index.vue에서 이미 처리 → 배열 순서 그대로 1-based 순번 부여
   data.pages.forEach((p, i) => viewportEl.appendChild(renderPage(p, data, i + 1, total)))
 }

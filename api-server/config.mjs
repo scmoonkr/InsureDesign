@@ -63,5 +63,6 @@ export function getConfig() {
       .split(',')
       .map(o => o.trim().replace(/\/$/, ''))
       .filter(Boolean),
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
   }
 }

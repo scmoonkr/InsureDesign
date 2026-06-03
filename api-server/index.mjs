@@ -1,8 +1,9 @@
 import http from 'node:http'
+import https from 'node:https'
 import fs from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile, readFile } from 'node:fs/promises'
 import { URL } from 'node:url'
 import { ObjectId } from 'mongodb'
 import { getMongoDb } from './mongo.mjs'
@@ -17,6 +18,7 @@ import { listContents, getContentById, createContent, updateContent, listPublicC
 import { listCategories, createCategory, updateCategory, deleteCategory, getCategoryBySlug, getCategoriesByIds } from './categories-service.mjs'
 import { listTags, findOrCreateTagsByNames, getTagBySlug, getTagsByIds } from './tags-service.mjs'
 import { listMenus, createMenu, updateMenu, deleteMenu } from './menus-service.mjs'
+import { listAnalysisDocs, getAnalysisDoc, createAnalysisDoc, updateAnalysisDoc, deleteAnalysisDoc } from './analysis-service.mjs'
 
 loadEnv()
 
@@ -449,6 +451,7 @@ const UPLOAD_MIME_TYPES = {
   '.png': 'image/png', '.gif': 'image/gif',
   '.webp': 'image/webp', '.svg': 'image/svg+xml',
   '.mp4': 'video/mp4', '.webm': 'video/webm',
+  '.pdf': 'application/pdf',
 }
 
 const ALLOWED_UPLOAD_MIME = /^(image\/(jpeg|png|gif|webp|svg\+xml)|video\/(mp4|webm))$/
@@ -1786,6 +1789,227 @@ async function fetchProfile(provider, accessToken) {
   }
 }
 
+// ── Analysis handlers ─────────────────────────────────────────────────────────
+
+async function handleListAnalysis(req, res) {
+  const session = await checkAdmin(req, res)
+  if (!session) return
+  const items = await listAnalysisDocs()
+  sendJson(req, res, 200, { items })
+}
+
+async function handleGetAnalysis(req, res, id) {
+  const session = await checkAdmin(req, res)
+  if (!session) return
+  const item = await getAnalysisDoc(id)
+  if (!item) { sendError(req, res, 404, 'Not found'); return }
+  sendJson(req, res, 200, { item })
+}
+
+async function handleCreateAnalysis(req, res) {
+  const session = await checkAdmin(req, res)
+  if (!session) return
+  const body = await readJsonBody(req)
+  const item = await createAnalysisDoc(body)
+  sendJson(req, res, 201, { item })
+}
+
+async function handleUpdateAnalysis(req, res, id) {
+  const session = await checkAdmin(req, res)
+  if (!session) return
+  const body = await readJsonBody(req)
+  const ok = await updateAnalysisDoc(id, body)
+  if (!ok) { sendError(req, res, 404, 'Not found'); return }
+  sendJson(req, res, 200, { ok: true })
+}
+
+async function handleDeleteAnalysis(req, res, id) {
+  const session = await checkAdmin(req, res)
+  if (!session) return
+  const ok = await deleteAnalysisDoc(id)
+  if (!ok) { sendError(req, res, 404, 'Not found'); return }
+  sendJson(req, res, 200, { ok: true })
+}
+
+async function handleUploadAnalysisPdf(req, res) {
+  const session = await checkAdmin(req, res)
+  if (!session) return
+  const { uploadDir, defaultSiteId } = getConfig()
+  const MAX = 30 * 1024 * 1024 // 30 MB
+  const body = await readRawBody(req, MAX)
+  const boundary = getMultipartBoundary(req.headers['content-type'])
+  if (!boundary) { sendError(req, res, 400, 'multipart boundary missing'); return }
+  const parts = parseMultipart(body, boundary)
+  const filePart = parts.find(p => p.filename && p.data?.length > 0)
+  if (!filePart) { sendError(req, res, 400, 'No file'); return }
+  const ext = path.extname(filePart.filename || '').toLowerCase()
+  if (ext !== '.pdf') { sendError(req, res, 400, 'PDF 파일만 업로드 가능합니다'); return }
+  const hash = createHash('sha256').update(filePart.data).digest('hex')
+  const { fullDir, fullPath, urlPath } = buildUploadPaths(uploadDir, defaultSiteId, filePart.filename, hash)
+  await mkdir(fullDir, { recursive: true })
+  await writeFile(fullPath, filePart.data)
+  sendJson(req, res, 200, {
+    filename: path.basename(fullPath),
+    originalName: filePart.filename,
+    urlPath,
+  })
+}
+
+function urlPathToFilePath(urlPath, uploadDir) {
+  const rel = urlPath.replace(/^\/uploads\//, '')
+  return path.resolve(uploadDir, rel)
+}
+
+async function callClaudeApi(messages, systemPrompt, maxTokens = 4096) {
+  const { anthropicApiKey } = getConfig()
+  if (!anthropicApiKey) {
+    throw Object.assign(new Error('ANTHROPIC_API_KEY가 설정되지 않았습니다'), { statusCode: 500 })
+  }
+  const bodyStr = JSON.stringify({
+    model: 'claude-opus-4-8',
+    max_tokens: maxTokens,
+    system: systemPrompt,
+    messages,
+  })
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.anthropic.com',
+      path: '/v1/messages',
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': anthropicApiKey,
+        'anthropic-version': '2023-06-01',
+        'content-length': Buffer.byteLength(bodyStr),
+      },
+    }, (res) => {
+      const chunks = []
+      res.on('data', c => chunks.push(c))
+      res.on('end', () => {
+        try {
+          const data = JSON.parse(Buffer.concat(chunks).toString())
+          if (data.error) reject(new Error(data.error.message || 'Claude API error'))
+          else resolve(data)
+        } catch (e) { reject(e) }
+      })
+    })
+    req.on('error', reject)
+    req.write(bodyStr)
+    req.end()
+  })
+}
+
+async function handleAnalyzeInsurance(req, res, id) {
+  const session = await checkAdmin(req, res)
+  if (!session) return
+  const doc = await getAnalysisDoc(id)
+  if (!doc) { sendError(req, res, 404, 'Not found'); return }
+  const { uploadDir } = getConfig()
+
+  const content = []
+
+  async function addPdf(pdfInfo, title) {
+    if (!pdfInfo?.urlPath) return
+    try {
+      const data = await readFile(urlPathToFilePath(pdfInfo.urlPath, uploadDir))
+      content.push({
+        type: 'document',
+        source: { type: 'base64', media_type: 'application/pdf', data: data.toString('base64') },
+        title,
+      })
+    } catch { /* 파일 없으면 skip */ }
+  }
+
+  await addPdf(doc.existingInsurancePdf, '기존보험내역')
+  for (let i = 0; i < (doc.proposalPdfs || []).length; i++) {
+    await addPdf(doc.proposalPdfs[i], `보험설계서 ${i + 1}: ${doc.proposalPdfs[i]?.originalName || ''}`)
+  }
+
+  if (content.length === 0) { sendError(req, res, 400, '분석할 PDF 파일이 없습니다'); return }
+
+  content.push({
+    type: 'text',
+    text: `고객명: ${doc.customerName}, 설계사: ${doc.agentName}\n\n위 보험 문서를 분석하여 아래 JSON 형식으로만 반환하세요 (설명 없이):\n{\n  "customer": { "name": "", "age": 0, "gender": "", "contractor": "" },\n  "existingInsurance": { "summary": "", "companies": [], "monthlyTotal": 0, "coverageGaps": [] },\n  "proposals": [{ "company": "", "product": "", "monthlyPremium": 0, "coverage": [], "keyBenefits": [], "role": "", "epithet": "" }],\n  "recommendations": { "summary": "", "totalMonthly": 0, "strategy": "" }\n}`,
+  })
+
+  const response = await callClaudeApi(
+    [{ role: 'user', content }],
+    '당신은 한국 보험 전문가입니다. 보험 문서를 분석하고 정확한 JSON만 반환합니다.',
+    4096,
+  )
+
+  const rawText = response.content?.[0]?.text || ''
+  let analysisResult
+  try {
+    const m = rawText.match(/\{[\s\S]*\}/)
+    analysisResult = JSON.parse(m?.[0] || rawText)
+  } catch { analysisResult = { raw: rawText } }
+
+  await updateAnalysisDoc(id, { analysisResult })
+  sendJson(req, res, 200, { ok: true, analysisResult })
+}
+
+async function handleGenerateProposal(req, res, id) {
+  const session = await checkAdmin(req, res)
+  if (!session) return
+  const doc = await getAnalysisDoc(id)
+  if (!doc) { sendError(req, res, 404, 'Not found'); return }
+  if (!doc.analysisResult) { sendError(req, res, 400, '먼저 분석(LLM)을 실행하세요'); return }
+
+  const a = doc.analysisResult
+  const companies = (a.proposals || []).map(p => p.company).filter(Boolean)
+  const totalPages = 8 + (a.proposals || []).length
+
+  const prompt = `다음 보험 분석 결과를 바탕으로 고객 제안서 JSON을 생성하세요.
+
+분석결과: ${JSON.stringify(a, null, 2)}
+
+아래 구조의 JSON을 반환하세요. JSON만 반환하고 설명은 쓰지 마세요.
+페이지 구성: sectionCover(pageNo:1), missionStatement(pageNo:2), riskIceberg(pageNo:3), companyPuzzleOverview(pageNo:4), companyMatrix(pageNo:5), 각 보험사별 companyDetail(pageNo:6~), careJourney(마지막-1), closingBalance(마지막)
+
+{
+  "id": "proposal-${id}",
+  "title": "고객 맞춤 통합 보장 블루프린트",
+  "subtitle": "${companies.length}개사 강점 조립형 설계",
+  "documentType": "customerProposal",
+  "totalPages": ${totalPages},
+  "customer": ${JSON.stringify(a.customer || { name: doc.customerName, age: 0, gender: '', contractor: doc.agentName })},
+  "disclaimer": { "text": "본 자료는 보험 가입 검토를 돕기 위한 요약 제안서이며, 실제 보장 내용과 보험금 지급 기준은 각 보험사의 약관 및 상품설명서를 기준으로 합니다." },
+  "renderHint": { "theme": "luxury", "layout": "center-focus", "background": "dark-navy", "accent": "gold" },
+  "pages": [ ...각 페이지 객체 배열... ]
+}
+
+각 page 객체의 필수 필드: id, pageNo, type, eyebrow(seal,subtitle,pagination), footer(brand,pageNumber)
+sectionCover는 cover(title,description) 포함
+missionStatement는 title, body(missionCard,pillars) 포함
+riskIceberg는 title, body(iceberg,aside) 포함
+companyPuzzleOverview는 title, body(quote,pieces) 포함
+companyMatrix는 title, body(table) 포함
+companyDetail은 title, premium, visual(type,label,coverageList), strategy(heading,items,quote) 포함
+careJourney는 title, body(journeyTag,journey) 포함
+closingBalance는 title, body(balance,closingStatement) 포함`
+
+  const response = await callClaudeApi(
+    [{ role: 'user', content: prompt }],
+    `당신은 한국 보험 제안서 작성 전문가입니다. 주어진 분석 결과를 기반으로 정확한 JSON 제안서를 생성합니다.
+COMPANY_COLORS 참고: 흥국화재=#2A3E66, 라이나생명=#5C2A66, KB손해보험=#6E5A1B, 한화생명=#2C5E54
+반드시 유효한 JSON만 반환하세요.`,
+    8192,
+  )
+
+  const rawText = response.content?.[0]?.text || ''
+  let proposalData
+  try {
+    const m = rawText.match(/\{[\s\S]*\}/)
+    proposalData = JSON.parse(m?.[0] || rawText)
+  } catch { sendError(req, res, 500, `JSON 파싱 실패: ${rawText.slice(0, 200)}`); return }
+
+  await updateAnalysisDoc(id, { proposalData })
+  sendJson(req, res, 200, { ok: true, proposalData })
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function handleRequest(req, res) {
   if (req.method === 'OPTIONS') {
     applyCors(req, res)
@@ -2041,6 +2265,29 @@ async function handleRequest(req, res) {
     if (adminMenuMatch) {
       if (req.method === 'PUT') { await handleUpdateMenu(req, res, adminMenuMatch[1], url); return }
       if (req.method === 'DELETE') { await handleDeleteMenu(req, res, adminMenuMatch[1], url); return }
+    }
+
+    // ── Analysis: insurancePlanning ───────────────────────────────────────────
+    if (req.method === 'GET' && url.pathname === '/api/analysis') {
+      await handleListAnalysis(req, res); return
+    }
+    if (req.method === 'POST' && url.pathname === '/api/analysis') {
+      await handleCreateAnalysis(req, res); return
+    }
+    if (req.method === 'POST' && url.pathname === '/api/analysis/upload-pdf') {
+      await handleUploadAnalysisPdf(req, res); return
+    }
+    const analysisIdMatch = url.pathname.match(/^\/api\/analysis\/([^/]+)$/)
+    if (analysisIdMatch) {
+      if (req.method === 'GET') { await handleGetAnalysis(req, res, analysisIdMatch[1]); return }
+      if (req.method === 'PUT') { await handleUpdateAnalysis(req, res, analysisIdMatch[1]); return }
+      if (req.method === 'DELETE') { await handleDeleteAnalysis(req, res, analysisIdMatch[1]); return }
+    }
+    const analysisActionMatch = url.pathname.match(/^\/api\/analysis\/([^/]+)\/(analyze|generate)$/)
+    if (analysisActionMatch && req.method === 'POST') {
+      const [, id, action] = analysisActionMatch
+      if (action === 'analyze') { await handleAnalyzeInsurance(req, res, id); return }
+      if (action === 'generate') { await handleGenerateProposal(req, res, id); return }
     }
 
     sendError(req, res, 404, 'Not found')
