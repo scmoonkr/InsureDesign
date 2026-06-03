@@ -115,6 +115,10 @@ onMounted(async () => {
 
 .ip-state { padding: 60px 24px; text-align: center; font-family: sans-serif; font-size: 14px; color: #7A6249; }
 .ip-error { color: #b71c1c; }
+
+@media print {
+  .ip-bar { display: none !important; }
+}
 </style>
 
 <style src="~/assets/css/insurance-proposal.css" />
