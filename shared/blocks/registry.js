@@ -18,6 +18,8 @@ export const INITIAL_BLOCK_NAMES = [
   'image',
   // ── site-specific custom blocks ──
   'insuranceCalculator',
+  'insurancePlanning',
+  'insuranceAnalysis',
 ]
 
 // Row layout tokens (mirrors the layout picker UI in BlockInsertModal).
