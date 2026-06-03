@@ -34,6 +34,7 @@ import TabsBlock from './TabsBlock.vue'
 import PostListBlock from './PostListBlock.vue'
 import ImageBlock from './ImageBlock.vue'
 import InsuranceCalculatorBlock from './insurance/InsuranceCalculatorBlock.vue'
+import InsurancePlanningBlock from './insurance/InsurancePlanning.vue'
 
 type BlockNode = { type: string; props: Record<string, unknown> }
 type MediaInfo = { paths?: { original?: string }; title?: string; alt?: string }
@@ -72,6 +73,7 @@ const registry: Record<string, Component> = {
   image: ImageBlock,
   // ── insure 전용 ──
   insuranceCalculator: InsuranceCalculatorBlock,
+  insurancePlanning:   InsurancePlanningBlock,
 }
 
 const fallback = shallowRef(TextBlock)

@@ -257,6 +257,14 @@ export const BLOCK_TYPES = {
       defaultType: { type: 'enum', values: ['life', 'term', 'health', 'cancer'], default: 'life' },
     },
   },
+
+  insurancePlanning: {
+    label: '보험 설계 제안서',
+    requiresContent: false,
+    options: {
+      id: { type: 'string', required: true },
+    },
+  },
 }
 
 export function isAllowedBlock(name, siteAllowed) {
