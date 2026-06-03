@@ -137,11 +137,13 @@ function formatDate(iso?: string) { return iso ? iso.slice(0, 10) : '—' }
 
 <style scoped>
 /* ── 전체 너비 (page body width) ── */
+/* public-content(880px) → public-content-shell(1200px)까지 확장.
+   block-title과 동일한 50% - 50vw 기법 사용. */
 .ia-block {
-  /* content 영역의 좌우 패딩을 상쇄해 page body 전체 너비로 확장 */
-  margin-left:  calc(-1 * var(--theme-pad-x, 64px));
-  margin-right: calc(-1 * var(--theme-pad-x, 64px));
-  padding: 28px var(--theme-pad-x, 64px) 40px;
+  margin-left:  calc(50% - 50vw);
+  margin-right: calc(50% - 50vw);
+  /* shell padding(24px)과 맞추되 viewport > 1200px 이면 여백 유지 */
+  padding: 28px max(24px, calc(50vw - 576px)) 40px;
   font-family: -apple-system, "Apple SD Gothic Neo", sans-serif;
   font-size: 14px;
   color: #1a1a1a;
