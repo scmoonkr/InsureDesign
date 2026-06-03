@@ -414,7 +414,8 @@ const BLOCK_OPTIONS = [
 
 // 사이트 전용 커스텀 블록 — 일반 블록과 별도 UI 섹션에 표시
 const CUSTOM_BLOCK_OPTIONS = [
-  { value: 'insuranceCalculator', label: '보험료 계산기', site: 'insure' },
+  { value: 'insuranceCalculator', label: '보험료 계산기',    site: 'insure' },
+  { value: 'insurancePlanning',   label: '보험 설계 제안서', site: 'insure' },
 ]
 
 const TEMPLATE_OPTIONS = [
@@ -479,6 +480,7 @@ const TEXT_TEMPLATES: Record<string, string> = {
   tabs: `:::tabs\nitems: ${JSON.stringify(TABS_PLACEHOLDER)}\n:::`,
   // ── 커스텀 블록 ──
   insuranceCalculator: `:::insuranceCalculator\ntitle: 보험료 계산기\nsubtitle: 간단한 정보 입력만으로 예상 보험료를 확인하세요.\ndefaultAge: 30\ndefaultType: life\n:::`,
+  insurancePlanning: `:::insurancePlanning\nid: 레코드ID를_입력하세요\n:::`,
 }
 
 function buildImageBlock(type: string, imageIds: string[]): string {
