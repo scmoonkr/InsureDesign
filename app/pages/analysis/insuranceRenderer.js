@@ -82,14 +82,14 @@ function emphasizeMany(text, emphases) {
 const fmt = n => (typeof n === 'number' ? n.toLocaleString('ko-KR') : String(n))
 
 // ─── Shared chrome (header / footer) ─────────────────────────────────────────
-function renderHead(page, data) {
+// pageNum, total 은 renderProposal이 계산한 실제 값 (JSON 하드코딩 무시)
+function renderHead(page, data, pageNum, total) {
   const eyebrow = page.eyebrow || {}
-  const pag = eyebrow.pagination || { current: page.pageNo, total: data.totalPages }
   return h('header', { class: 'page-head' }, [
     h('div', { class: 'eyebrow' }, [
       eyebrow.seal ? h('div', { class: 'seal' }, eyebrow.seal) : null,
       h('div', { class: 'eyebrow-text' }, [
-        h('div', { class: 'eyebrow-label' }, 'Chapter ' + String(pag.current).padStart(2, '0')),
+        h('div', { class: 'eyebrow-label' }, 'Chapter ' + String(pageNum).padStart(2, '0')),
         h('div', { class: 'eyebrow-sub' }, eyebrow.subtitle || ''),
       ]),
     ]),
@@ -100,8 +100,7 @@ function renderHead(page, data) {
   ])
 }
 
-function renderFoot(page, data) {
-  const pag = (page.eyebrow && page.eyebrow.pagination) || { current: page.pageNo, total: data.totalPages }
+function renderFoot(page, data, pageNum, total) {
   const brand = page.footer && page.footer.brand
   const brandEl = brand
     ? h('span', { class: 'foot-brand' }, [
@@ -118,9 +117,9 @@ function renderFoot(page, data) {
       brandEl ? h('div', { class: 'foot-brand-line' }, brandEl) : null,
     ]),
     h('div', { class: 'foot-pg' }, [
-      h('span', { class: 'num' }, String(pag.current).padStart(2, '0')),
+      h('span', { class: 'num' }, String(pageNum).padStart(2, '0')),
       h('span', null, '/'),
-      h('span', { class: 'total' }, String(pag.total).padStart(2, '0')),
+      h('span', { class: 'total' }, String(total).padStart(2, '0')),
     ]),
   ])
 }
@@ -476,7 +475,7 @@ function renderVisual(v, co) {
       v.coverageList ? h('ul', { class: 'vlist' }, v.coverageList.map(l => h('li', null, l))) : null,
     ])
   }
-  if (v.type === 'hospitalGateway') {
+  if (v.type === 'hospital') {
     return h('div', { class: 'visual viz-gateway' }, [
       h('div', { class: 'vlbl' }, v.label),
       h('div', { class: 'gate-wrap', html: hospitalGatewaySVG(co) }),
@@ -485,7 +484,7 @@ function renderVisual(v, co) {
         : h('div', { class: 'gw-cap' }, '상급종합병원 · 대학병원 · 대형병원'),
     ])
   }
-  if (v.type === 'continuousCareCycle') {
+  if (v.type === 'care') {
     return h('div', { class: 'visual viz-cycle' }, [
       h('div', { class: 'vlbl' }, v.label),
       h('div', { class: 'cyc-wrap', html: continuousCycleSVG(co) }),
@@ -494,7 +493,7 @@ function renderVisual(v, co) {
         : h('div', { class: 'gw-cap' }, '끊기지 않는 보장의 순환'),
     ])
   }
-  if (v.type === 'familyProtection') {
+  if (v.type === 'family') {
     return h('div', { class: 'visual viz-family' }, [
       h('div', { class: 'vlbl' }, v.label),
       h('div', { class: 'fam-wrap', html: familyProtectionSVG(co) }),
@@ -592,25 +591,28 @@ function familyProtectionSVG(co) {
 }
 
 // ─── Page assembly ────────────────────────────────────────────────────────────
-function renderPage(page, data) {
+// pageNum: 실제 렌더링 순번 (1-based), total: 전체 페이지 수
+function renderPage(page, data, pageNum, total) {
   const renderer = RENDERERS[page.type]
   if (!renderer) {
     return h('section', { class: 'page' }, [
-      renderHead(page, data),
+      renderHead(page, data, pageNum, total),
       h('div', { class: 'body' }, h('p', null, `Unknown page type: ${page.type}`)),
-      renderFoot(page, data),
+      renderFoot(page, data, pageNum, total),
     ])
   }
   const body = renderer(page, data)
   return h('section', {
     class: `page t-${page.type}`,
-    'data-screen-label': String(page.pageNo).padStart(2, '0') + ' ' + (page.eyebrow?.subtitle || page.type),
-  }, [renderHead(page, data), body, renderFoot(page, data)])
+    'data-screen-label': String(pageNum).padStart(2, '0') + ' ' + (page.eyebrow?.subtitle || page.type),
+  }, [renderHead(page, data, pageNum, total), body, renderFoot(page, data, pageNum, total)])
 }
 
 // ─── Public entry point ───────────────────────────────────────────────────────
 export function renderProposal(data, viewportEl) {
   if (!viewportEl) return
   viewportEl.innerHTML = ''
-  data.pages.forEach(p => viewportEl.appendChild(renderPage(p, data)))
+  const total = data.totalPages || data.pages.length
+  // pageNo 순 정렬은 index.vue에서 이미 처리 → 배열 순서 그대로 1-based 순번 부여
+  data.pages.forEach((p, i) => viewportEl.appendChild(renderPage(p, data, i + 1, total)))
 }

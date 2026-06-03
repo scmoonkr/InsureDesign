@@ -16,6 +16,7 @@ import { onMounted, ref } from 'vue'
 import { renderProposal } from './insuranceRenderer.js'
 import blueprintData from './blueprint_pages_v2.json'
 import openingPages from './opening.json'
+import existingAnalysisPages from './existingAnalysis.json'
 
 definePageMeta({ layout: 'default' })
 
@@ -34,12 +35,21 @@ useHead({
   ],
 })
 
-// opening.json(p1,p2) + blueprint_pages_v2.json(p3~) 합산 후 pageNo 순 정렬
+// 각 JSON 파일을 합산 후 pageNo 순 정렬
+// opening.json            → p1, p2  (고정)
+// existingAnalysis.json   → p3, p4  (기존보험 있을 때만, 없으면 빈 배열)
+// blueprint_pages_v2.json → p5~     (LLM 생성, 보험사 수에 따라 가변)
 const bp = blueprintData as any
+const mergedPages = [
+  ...(openingPages as any[]),
+  ...(existingAnalysisPages as any[]),
+  ...(bp.pages as any[]),
+].sort((a: any, b: any) => a.pageNo - b.pageNo)
+
 const data = {
   ...bp,
-  pages: [...(openingPages as any[]), ...(bp.pages as any[])]
-    .sort((a, b) => a.pageNo - b.pageNo),
+  totalPages: mergedPages.length,  // 실제 페이지 수로 자동 계산
+  pages: mergedPages,
 }
 
 const viewport = ref<HTMLElement | null>(null)
