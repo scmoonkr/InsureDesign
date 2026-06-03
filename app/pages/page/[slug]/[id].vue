@@ -1,6 +1,5 @@
 <template>
   <div class="ip-page">
-    <!-- 컨트롤 바 -->
     <div class="ip-bar">
       <div class="ip-bar-left">
         <button type="button" class="ip-back" @click="$router.back()">← 목록</button>
@@ -14,11 +13,8 @@
       </div>
     </div>
 
-    <!-- 로딩 -->
     <div v-if="pending" class="ip-state">불러오는 중...</div>
     <div v-else-if="loadError" class="ip-state ip-error">{{ loadError }}</div>
-
-    <!-- 제안서 렌더 -->
     <div v-else ref="viewport" class="viewport" />
   </div>
 </template>
@@ -34,14 +30,8 @@ useHead({
   link: [
     { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
     { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
-    {
-      rel: 'stylesheet',
-      href: 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap',
-    },
-    {
-      rel: 'stylesheet',
-      href: 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.css',
-    },
+    { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap' },
+    { rel: 'stylesheet', href: 'https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.css' },
   ],
 })
 
@@ -56,16 +46,13 @@ const record    = ref<any>(null)
 const canEdit   = ref(false)
 
 const pageTitle = computed(() =>
-  record.value ? `${record.value.customerName || ''} · ${record.value.title || '보험 설계서'}` : '보험 설계서',
+  record.value
+    ? `${record.value.customerName || ''} · ${record.value.title || '보험 설계서'}`
+    : '보험 설계서',
 )
 
-function goEdit() {
-  navigateTo('/backend/analysis')
-}
-
-function openProposal() {
-  window.open(`/analysis?id=${id}`, '_blank')
-}
+function goEdit() { navigateTo('/backend/analysis') }
+function openProposal() { window.open(`/analysis?id=${id}`, '_blank') }
 
 onMounted(async () => {
   try {
@@ -103,12 +90,8 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.ip-page {
-  background: var(--bg-outer, #E8D6B4);
-  min-height: 100vh;
-}
+.ip-page { background: var(--bg-outer, #E8D6B4); min-height: 100vh; }
 
-/* 컨트롤 바 */
 .ip-bar {
   position: sticky; top: 0; z-index: 200;
   display: flex; align-items: center; justify-content: space-between;
@@ -120,31 +103,17 @@ onMounted(async () => {
 }
 .ip-bar-left  { display: flex; align-items: center; gap: 14px; }
 .ip-bar-right { display: flex; align-items: center; gap: 8px; }
-
-.ip-back {
-  background: none; border: none; cursor: pointer;
-  font-size: 12px; color: rgba(251,245,236,.6); padding: 0;
-}
+.ip-back { background: none; border: none; cursor: pointer; font-size: 12px; color: rgba(251,245,236,.6); padding: 0; }
 .ip-back:hover { color: #E5A862; }
+.ip-bar-title { font-size: 12px; font-weight: 600; color: #E5A862; letter-spacing: .03em; }
 
-.ip-bar-title {
-  font-size: 12px; font-weight: 600; color: #E5A862; letter-spacing: .03em;
-}
-
-.ip-btn {
-  padding: 5px 14px; font-size: 12px; font-weight: 600;
-  border-radius: 4px; border: 1px solid transparent; cursor: pointer;
-}
+.ip-btn { padding: 5px 14px; font-size: 12px; font-weight: 600; border-radius: 4px; border: 1px solid transparent; cursor: pointer; }
 .ip-btn-secondary { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.2); color: #fff; }
 .ip-btn-secondary:hover { background: rgba(255,255,255,.18); }
 .ip-btn-primary { background: #C97A2A; border-color: #A0601E; color: #fff; }
 .ip-btn-primary:hover { background: #A0601E; }
 
-/* 상태 */
-.ip-state {
-  padding: 60px 24px; text-align: center;
-  font-family: sans-serif; font-size: 14px; color: #7A6249;
-}
+.ip-state { padding: 60px 24px; text-align: center; font-family: sans-serif; font-size: 14px; color: #7A6249; }
 .ip-error { color: #b71c1c; }
 </style>
 
