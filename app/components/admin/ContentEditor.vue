@@ -440,6 +440,7 @@ const CUSTOM_BLOCK_OPTIONS = [
   { value: 'insuranceCalculator', label: '보험료 계산기',    site: 'insure' },
   { value: 'insurancePlanning',   label: '보험 설계 제안서', site: 'insure' },
   { value: 'insuranceAnalysis',   label: '보험 설계 관리',   site: 'insure' },
+  { value: 'insureLocation',      label: '오시는 길',         site: 'insure' },
 ]
 
 const TEMPLATE_OPTIONS = [
@@ -506,6 +507,7 @@ const TEXT_TEMPLATES: Record<string, string> = {
   insuranceCalculator: `:::insuranceCalculator\ntitle: 보험료 계산기\nsubtitle: 간단한 정보 입력만으로 예상 보험료를 확인하세요.\ndefaultAge: 30\ndefaultType: life\n:::`,
   insurancePlanning: `:::insurancePlanning\nid: 레코드ID를_입력하세요\n:::`,
   insuranceAnalysis: `:::insuranceAnalysis\ntitle: 보험 설계 관리\n:::`,
+  insureLocation: `:::insureLocation\ntitle: 위치 및 연락처\nsubtitle: 지에이코리아 휴먼선운사업부 | 오시는 길을 | 안내해 드립니다.\naddress: ( 22140) 주안중로 25 (주안동 169, 신성쇼핑 708호)\nphone: 032-424-7726\nfax: 032-429-4004\ndirections: 경인1호선 주안역 1번출구 도보 430m | 인천2호선 시민공원(문화창작지대)역 1번출구 770m\nmapImageId: \n:::`,
 }
 
 function buildImageBlock(type: string, imageIds: string[]): string {

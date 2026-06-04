@@ -43,6 +43,8 @@ export function collectImageIds(nodes) {
       for (const it of n.props.items) {
         if (it && typeof it.imageId === 'string' && it.imageId) ids.add(it.imageId)
       }
+    } else if (n.type === 'insureLocation' && typeof n.props?.mapImageId === 'string' && n.props.mapImageId) {
+      ids.add(n.props.mapImageId)
     }
   })
   return [...ids]
@@ -59,6 +61,8 @@ function missingImageIdsForNode(n, mediaMap) {
     if (n.props?.imageId) check(n.props.imageId)
   } else if (n.type === 'timeline' || n.type === 'mediaText') {
     (n.props?.items || []).forEach(it => { if (it?.imageId) check(it.imageId) })
+  } else if (n.type === 'insureLocation') {
+    if (n.props?.mapImageId) check(n.props.mapImageId)
   }
   return missing
 }

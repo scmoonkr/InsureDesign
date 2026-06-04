@@ -20,6 +20,7 @@ export const INITIAL_BLOCK_NAMES = [
   'insuranceCalculator',
   'insurancePlanning',
   'insuranceAnalysis',
+  'insureLocation',
 ]
 
 // access 옵션은 모든 블록에서 사용 가능한 범용 옵션입니다.
@@ -280,6 +281,20 @@ export const BLOCK_TYPES = {
     requiresContent: false,
     options: {
       title: { type: 'string' },
+    },
+  },
+
+  insureLocation: {
+    label: '오시는 길',
+    requiresContent: false,
+    options: {
+      title:      { type: 'string' },
+      subtitle:   { type: 'string' },
+      address:    { type: 'string' },
+      phone:      { type: 'string' },
+      fax:        { type: 'string' },
+      directions: { type: 'string' },
+      mapImageId: { type: 'imageId' },
     },
   },
 }
