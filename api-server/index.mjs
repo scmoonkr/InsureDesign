@@ -2058,7 +2058,7 @@ async function handleRequest(req, res) {
 
   let url
   try {
-    url = new URL(req.url || '/', getConfig().apiBase)
+    url = new URL(req.url || '/', 'http://localhost')
   } catch {
     sendJson(req, res, 400, { error: 'Bad request' })
     return
