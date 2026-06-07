@@ -336,10 +336,21 @@ export async function generatePdf(proposalData, uploadDir, siteId = 'default', t
   }
 
   const html    = await buildHtml(proposalData)
-  const browser = await puppeteer.launch({
+  const launchOpts = {
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
-  })
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-gpu',
+      '--no-first-run',
+      '--no-zygote',
+    ],
+  }
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+    launchOpts.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+  }
+  const browser = await puppeteer.launch(launchOpts)
 
   try {
     const page = await browser.newPage()
