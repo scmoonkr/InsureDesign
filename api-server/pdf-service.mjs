@@ -2,10 +2,36 @@ import { readFile, mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
+import { existsSync } from 'node:fs'
+import os from 'node:os'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ANALYSIS_DIR = path.resolve(__dirname, '../app/pages/analysis')
 const CSS_PATH     = path.resolve(__dirname, '../app/assets/css/insurance-proposal.css')
+
+const FONT_PATHS = [
+  path.resolve(__dirname, '../app/public/fonts/PretendardVariable.ttf'),
+  path.join(os.homedir(), '.local/share/fonts/PretendardVariable.ttf'),
+  '/usr/share/fonts/pretendard/PretendardVariable.ttf',
+]
+
+async function buildFontCss() {
+  for (const p of FONT_PATHS) {
+    if (!existsSync(p)) continue
+    try {
+      const data = await readFile(p)
+      const b64  = data.toString('base64')
+      return `@font-face {
+  font-family: 'Pretendard Variable';
+  src: url('data:font/truetype;base64,${b64}') format('truetype');
+  font-weight: 100 900;
+  font-display: block;
+}
+* { font-family: 'Pretendard Variable', sans-serif; }`
+    } catch {}
+  }
+  return '' // CDN fallback
+}
 
 const PRINT_CSS = `
 @media print {
@@ -29,9 +55,10 @@ const PRINT_CSS = `
 `
 
 async function buildHtml(proposalData) {
-  const [css, rendererRaw] = await Promise.all([
+  const [css, rendererRaw, fontCss] = await Promise.all([
     readFile(CSS_PATH, 'utf8'),
     readFile(path.join(ANALYSIS_DIR, 'insuranceRenderer.js'), 'utf8'),
+    buildFontCss(),
   ])
 
   // Strip ES module export keywords so the script runs inline
@@ -45,8 +72,8 @@ async function buildHtml(proposalData) {
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&display=swap" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.css" rel="stylesheet">
 <style>
+${fontCss}
 body { margin: 0; padding: 0; background: var(--bg-outer, #E8D6B4); }
 ${css}
 ${PRINT_CSS}
