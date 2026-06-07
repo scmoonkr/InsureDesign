@@ -448,7 +448,7 @@ export async function generatePdf(proposalData, uploadDir, siteId = 'default', t
     const yyyy = now.getFullYear().toString()
     const mm   = String(now.getMonth() + 1).padStart(2, '0')
     const dir  = path.resolve(uploadDir, 'sites', siteId, yyyy, mm, 'pdf')
-    const urlPath = `/uploads/sites/${siteId}/${yyyy}/${mm}/pdf/${filename}`
+    const urlPath = `/uploads/sites/${siteId}/${yyyy}/${mm}/pdf/${filename}?t=${Date.now()}`
 
     await mkdir(dir, { recursive: true })
     await writeFile(path.join(dir, filename), pdfBuf)
