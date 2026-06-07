@@ -15,7 +15,7 @@ export function useSiteConfig() {
   const { data } = useAsyncData<SiteConfig>(
     'site-config',
     () => $fetch<SiteConfig>(`${apiBase}/api/public/site-config`),
-    { server: true, default: () => ({ ...DEFAULT }) },
+    { server: false, default: () => ({ ...DEFAULT }) },
   )
   return data as Ref<SiteConfig>
 }
