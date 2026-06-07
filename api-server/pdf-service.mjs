@@ -9,28 +9,78 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const ANALYSIS_DIR = path.resolve(__dirname, '../app/pages/analysis')
 const CSS_PATH     = path.resolve(__dirname, '../app/assets/css/insurance-proposal.css')
 
-const FONT_PATHS = [
-  path.resolve(__dirname, '../app/public/fonts/PretendardVariable.ttf'),
-  path.join(os.homedir(), '.local/share/fonts/PretendardVariable.ttf'),
-  '/usr/share/fonts/pretendard/PretendardVariable.ttf',
+const FONT_DIR_CANDIDATES = [
+  path.resolve(__dirname, '../app/public/fonts'),
+  path.join(os.homedir(), '.local/share/fonts'),
+  '/usr/share/fonts/pretendard',
 ]
 
+const STATIC_WEIGHTS = [
+  { file: 'Pretendard-Thin.ttf',       weight: 100 },
+  { file: 'Pretendard-ExtraLight.ttf', weight: 200 },
+  { file: 'Pretendard-Light.ttf',      weight: 300 },
+  { file: 'Pretendard-Regular.ttf',    weight: 400 },
+  { file: 'Pretendard-Medium.ttf',     weight: 500 },
+  { file: 'Pretendard-SemiBold.ttf',   weight: 600 },
+  { file: 'Pretendard-Bold.ttf',       weight: 700 },
+  { file: 'Pretendard-ExtraBold.ttf',  weight: 800 },
+  { file: 'Pretendard-Black.ttf',      weight: 900 },
+]
+
+async function toBase64Font(filePath) {
+  try {
+    const data = await readFile(filePath)
+    return data.toString('base64')
+  } catch { return null }
+}
+
 async function buildFontCss() {
-  for (const p of FONT_PATHS) {
-    if (!existsSync(p)) continue
-    try {
-      const data = await readFile(p)
-      const b64  = data.toString('base64')
-      return `@font-face {
+  const rules = []
+
+  // 1) static weight fonts
+  for (const dir of FONT_DIR_CANDIDATES) {
+    let found = 0
+    for (const { file, weight } of STATIC_WEIGHTS) {
+      const p = path.join(dir, file)
+      if (!existsSync(p)) continue
+      const b64 = await toBase64Font(p)
+      if (!b64) continue
+      found++
+      rules.push(`@font-face {
+  font-family: 'Pretendard';
+  font-weight: ${weight};
+  src: url('data:font/truetype;base64,${b64}') format('truetype');
+  font-display: block;
+}
+@font-face {
+  font-family: 'Pretendard Variable';
+  font-weight: ${weight};
+  src: url('data:font/truetype;base64,${b64}') format('truetype');
+  font-display: block;
+}`)
+    }
+    if (found > 0) break
+  }
+
+  // 2) variable font fallback
+  if (rules.length === 0) {
+    for (const dir of FONT_DIR_CANDIDATES) {
+      const p = path.join(dir, 'PretendardVariable.ttf')
+      if (!existsSync(p)) continue
+      const b64 = await toBase64Font(p)
+      if (!b64) continue
+      rules.push(`@font-face {
   font-family: 'Pretendard Variable';
   src: url('data:font/truetype;base64,${b64}') format('truetype');
   font-weight: 100 900;
   font-display: block;
-}
-* { font-family: 'Pretendard Variable', sans-serif; }`
-    } catch {}
+}`)
+      break
+    }
   }
-  return '' // CDN fallback
+
+  if (rules.length === 0) return ''
+  return rules.join('\n') + `\n* { font-family: 'Pretendard Variable', 'Pretendard', sans-serif; }`
 }
 
 const PRINT_CSS = `
