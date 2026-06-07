@@ -1,6 +1,6 @@
-<template>
+﻿<template>
   <div class="theme-default">
-    <DefaultThemeTopbar title="Korean Swimming Registry" :items="navItems" />
+    <DefaultThemeTopbar :items="navItems" />
 
     <main class="my-page-editor-shell">
       <div class="my-page-editor-head">

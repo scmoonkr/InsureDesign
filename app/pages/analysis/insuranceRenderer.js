@@ -500,6 +500,34 @@ function renderVisual(v, co) {
       v.coverageList ? h('ul', { class: 'vlist' }, v.coverageList.map(l => h('li', null, l))) : null,
     ])
   }
+  if (v.type === 'income') {
+    return h('div', { class: 'visual viz-income' }, [
+      h('div', { class: 'vlbl' }, v.label),
+      h('div', { class: 'income-wrap', html: incomeReplacementSVG() }),
+      v.coverageList ? h('ul', { class: 'vlist' }, v.coverageList.map(l => h('li', null, l))) : null,
+    ])
+  }
+  if (v.type === 'legacy') {
+    return h('div', { class: 'visual viz-legacy' }, [
+      h('div', { class: 'vlbl' }, v.label),
+      h('div', { class: 'legacy-wrap', html: legacyProtectionSVG() }),
+      v.coverageList ? h('ul', { class: 'vlist' }, v.coverageList.map(l => h('li', null, l))) : null,
+    ])
+  }
+  if (v.type === 'dementia') {
+    return h('div', { class: 'visual viz-dementia' }, [
+      h('div', { class: 'vlbl' }, v.label),
+      h('div', { class: 'dementia-wrap', html: dementiaCareSSVG() }),
+      v.coverageList ? h('ul', { class: 'vlist' }, v.coverageList.map(l => h('li', null, l))) : null,
+    ])
+  }
+  if (v.type === 'child') {
+    return h('div', { class: 'visual viz-child' }, [
+      h('div', { class: 'vlbl' }, v.label),
+      h('div', { class: 'child-wrap', html: childGrowthSVG() }),
+      v.coverageList ? h('ul', { class: 'vlist' }, v.coverageList.map(l => h('li', null, l))) : null,
+    ])
+  }
   return h('div', { class: 'visual' }, h('div', { class: 'vlbl' }, v.label || ''))
 }
 
@@ -588,6 +616,67 @@ function familyProtectionSVG(co) {
       <path d="M 137 128 Q 137 112 150 112 Q 163 112 163 128 Z" fill="${co}" opacity=".7"/>
       <text x="120" y="166" text-anchor="middle" font-family="sans-serif" font-weight="600" font-size="9" fill="#221912">FAMILY PROTECTION</text>
     </svg>`
+}
+
+function incomeReplacementSVG() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 360">
+  <g transform="translate(256 190)">
+    <circle cx="0" cy="0" r="128" fill="#c46d48" opacity="0.08"/>
+    <path d="M-98 104 H98" stroke="#c46d48" stroke-width="3" stroke-linecap="round" opacity="0.58"/>
+    <path d="M-80 -22 A92 92 0 0 1 64 -76" fill="none" stroke="#c46d48" stroke-width="10" stroke-linecap="round" opacity="0.42"/>
+    <path d="M72 -64 L98 -53 L75 -36 Z" fill="#c46d48" opacity="0.42"/>
+    <path d="M80 21 A92 92 0 0 1 -64 75" fill="none" stroke="#c46d48" stroke-width="10" stroke-linecap="round" opacity="0.42"/>
+    <path d="M-72 64 L-98 53 L-75 36 Z" fill="#c46d48" opacity="0.42"/>
+    <circle cx="-10" cy="-32" r="31" fill="#c46d48" opacity="0.86"/>
+    <path d="M-58 104 V52 C-58 18 -35 -2 -10 -2 C15 -2 38 18 38 52 V104 Z" fill="#c46d48" opacity="0.86"/>
+    <path d="M-21 5 H1 L-6 22 H-14 Z" fill="#faf6ee" opacity="0.92"/>
+    <path d="M-15 22 H-5 L3 82 H-23 Z" fill="#faf6ee" opacity="0.92"/>
+    <circle cx="70" cy="52" r="36" fill="#c46d48" opacity="0.34"/>
+    <circle cx="70" cy="52" r="25" fill="#c46d48" opacity="0.55"/>
+    <path d="M57 40 L70 66 L83 40" fill="none" stroke="#faf6ee" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>`
+}
+
+function legacyProtectionSVG() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 360">
+  <g transform="translate(256 190)">
+    <path d="M0 -132 L116 -68 V46 C116 98 66 126 0 140 C-66 126 -116 98 -116 46 V-68 Z" fill="#a66576" opacity="0.09"/>
+    <path d="M0 -72 C37 -119 101 -75 58 -22 L0 34 L-58 -22 C-101 -75 -37 -119 0 -72 Z" fill="#a66576" opacity="0.22"/>
+    <path d="M-100 104 H100" stroke="#a66576" stroke-width="3" stroke-linecap="round" opacity="0.55"/>
+    <rect x="-26" y="36" width="52" height="68" rx="8" fill="#a66576" opacity="0.80"/>
+    <path d="M0 22 C-16 42 -12 61 0 68 C12 61 16 42 0 22 Z" fill="#faf6ee" opacity="0.82"/>
+    <path d="M0 38 C-7 48 -5 58 0 62 C5 58 7 48 0 38 Z" fill="#a66576" opacity="0.82"/>
+  </g>
+</svg>`
+}
+
+function dementiaCareSSVG() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 360">
+  <g transform="translate(256 190)">
+    <circle cx="0" cy="0" r="128" fill="#6f7fa8" opacity="0.10"/>
+    <path d="M-98 104 H98" stroke="#6f7fa8" stroke-width="3" stroke-linecap="round" opacity="0.55"/>
+    <path d="M-65 90 V18 C-65 -48 -21 -83 35 -76 C77 -71 98 -38 92 0 C88 28 70 45 51 58 V90 Z" fill="#6f7fa8" opacity="0.42"/>
+    <path d="M-26 -35 C-11 -62 35 -61 51 -34 C73 -28 77 3 58 15 C47 34 10 34 -1 17 C-26 20 -42 -10 -26 -35 Z" fill="#6f7fa8" opacity="0.75"/>
+    <path d="M5 -40 C-2 -21 5 -12 23 -12" fill="none" stroke="#faf6ee" stroke-width="5" stroke-linecap="round" opacity="0.55"/>
+    <path d="M36 -33 C24 -22 26 -6 41 0" fill="none" stroke="#faf6ee" stroke-width="5" stroke-linecap="round" opacity="0.55"/>
+    <path d="M15 48 C34 23 66 48 45 73 L15 101 L-15 73 C-36 48 -4 23 15 48 Z" fill="#6f7fa8" opacity="0.82"/>
+  </g>
+</svg>`
+}
+
+function childGrowthSVG() {
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 360">
+  <g transform="translate(256 190)">
+    <path d="M0 -132 L116 -68 V46 C116 98 66 126 0 140 C-66 126 -116 98 -116 46 V-68 Z" fill="#d5aa45" opacity="0.10"/>
+    <path d="M-100 104 H100" stroke="#d5aa45" stroke-width="3" stroke-linecap="round" opacity="0.55"/>
+    <circle cx="-38" cy="30" r="21" fill="#d5aa45" opacity="0.83"/>
+    <path d="M-72 104 V72 C-72 50 -58 38 -38 38 C-18 38 -4 50 -4 72 V104 Z" fill="#d5aa45" opacity="0.83"/>
+    <rect x="22" y="-25" width="38" height="129" rx="8" fill="#d5aa45" opacity="0.65"/>
+    <path d="M22 -8 H46 M22 14 H37 M22 36 H46 M22 58 H37 M22 80 H46" stroke="#faf6ee" stroke-width="5" stroke-linecap="round" opacity="0.70"/>
+    <path d="M-9 -86 L2 -63 L28 -60 L9 -42 L14 -16 L-9 -29 L-32 -16 L-27 -42 L-46 -60 L-20 -63 Z" fill="#d5aa45" opacity="0.78"/>
+  </g>
+</svg>`
 }
 
 // ─── Company order helper ─────────────────────────────────────────────────────

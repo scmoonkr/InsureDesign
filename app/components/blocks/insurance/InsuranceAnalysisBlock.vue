@@ -23,6 +23,7 @@
             <th>설계서</th>
             <th>분석</th>
             <th>생성</th>
+            <th>PDF</th>
             <th>등록일</th>
           </tr>
         </thead>
@@ -30,7 +31,7 @@
           <tr
             v-for="row in items"
             :key="row.id"
-            @click="navigateTo('/page/보험설계서/' + row.id)"
+            @click="onRowClick(row)"
           >
             <td><strong>{{ row.title || '(제목 없음)' }}</strong></td>
             <td>{{ row.customerName || '—' }}</td>
@@ -39,6 +40,10 @@
             <td class="ia-muted">{{ row.proposalPdfs?.length || 0 }}개</td>
             <td class="ia-muted">{{ (row as any).hasAnalysis ? '✓' : '—' }}</td>
             <td class="ia-muted">{{ (row as any).hasProposal ? '✓' : '—' }}</td>
+            <td class="ia-muted">
+              <span v-if="row.pdfPath" class="ia-pdf-badge">PDF</span>
+              <span v-else>—</span>
+            </td>
             <td class="ia-muted">{{ formatDate(row.createdAt) }}</td>
           </tr>
         </tbody>
@@ -93,7 +98,7 @@ type PdfFile = { filename: string; originalName: string; urlPath: string }
 type AnalysisItem = {
   id: string; title: string; customerName: string; agentName: string
   existingInsurancePdf: PdfFile | null; proposalPdfs: (PdfFile | null)[]
-  note: string; createdAt: string
+  note: string; pdfPath: string | null; createdAt: string
 }
 
 const apiBase = useApiBase()
@@ -129,6 +134,12 @@ async function createAndNavigate() {
     newError.value = '생성 실패'
   } finally {
     creating.value = false
+  }
+}
+
+function onRowClick(row: AnalysisItem) {
+  if (row.pdfPath) {
+    window.open(`${apiBase}${row.pdfPath}`, '_blank', 'noopener')
   }
 }
 
@@ -179,6 +190,17 @@ function formatDate(iso?: string) { return iso ? iso.slice(0, 10) : '—' }
 .ia-block-table tbody tr:hover { background: #f5f7ff; }
 .ia-block-table tbody td { padding: 11px 14px; vertical-align: middle; }
 .ia-muted { color: #888; }
+
+.ia-pdf-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  background: #2a3e66;
+  color: #fff;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
 
 /* ── 모달 / 미니 drawer ── */
 .ia-modal {

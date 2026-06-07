@@ -453,6 +453,23 @@
 .viz-family .fam-wrap { display: grid; place-items: center; min-height: 0; }
 .viz-family svg { width: 100%; max-width: 60mm; max-height: 42mm; height: auto; }
 
+/* income / legacy / dementia / child */
+.viz-income  { display: grid; grid-template-rows: auto 1fr auto; gap: 3mm; min-height: 0; }
+.viz-income  .income-wrap  { display: grid; place-items: center; min-height: 0; }
+.viz-income  svg { width: 100%; max-width: 60mm; max-height: 42mm; height: auto; }
+
+.viz-legacy  { display: grid; grid-template-rows: auto 1fr auto; gap: 3mm; min-height: 0; }
+.viz-legacy  .legacy-wrap  { display: grid; place-items: center; min-height: 0; }
+.viz-legacy  svg { width: 100%; max-width: 60mm; max-height: 42mm; height: auto; }
+
+.viz-dementia { display: grid; grid-template-rows: auto 1fr auto; gap: 3mm; min-height: 0; }
+.viz-dementia .dementia-wrap { display: grid; place-items: center; min-height: 0; }
+.viz-dementia svg { width: 100%; max-width: 60mm; max-height: 42mm; height: auto; }
+
+.viz-child   { display: grid; grid-template-rows: auto 1fr auto; gap: 3mm; min-height: 0; }
+.viz-child   .child-wrap   { display: grid; place-items: center; min-height: 0; }
+.viz-child   svg { width: 100%; max-width: 60mm; max-height: 42mm; height: auto; }
+
 /* ── p14 · Care Journey ────────────────────────────────────── */
 .t-careJourney .body { display: grid; grid-template-rows: auto minmax(0,1fr); gap: 6mm; min-height: 0; }
 .t-careJourney .journey-tag { display: inline-flex; align-items: center; gap: 10px; padding: 4px 12px; border: 0.5pt solid var(--bronze); color: var(--bronze); font-family: var(--f-disp); font-style: italic; font-size: 11pt; letter-spacing: .14em; text-transform: uppercase; align-self: start; justify-self: start; }

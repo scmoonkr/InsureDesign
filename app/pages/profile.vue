@@ -1,6 +1,6 @@
-<template>
+﻿<template>
   <div class="theme-default">
-    <DefaultThemeTopbar title="Korean Swimming Registry" :items="navItems" />
+    <DefaultThemeTopbar :items="navItems" />
 
     <main class="theme-page-body theme-profile-page">
       <section class="theme-profile-section">

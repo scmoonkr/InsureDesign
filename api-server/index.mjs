@@ -19,6 +19,7 @@ import { listCategories, createCategory, updateCategory, deleteCategory, getCate
 import { listTags, findOrCreateTagsByNames, getTagBySlug, getTagsByIds } from './tags-service.mjs'
 import { listMenus, createMenu, updateMenu, deleteMenu } from './menus-service.mjs'
 import { listAnalysisDocs, getAnalysisDoc, createAnalysisDoc, updateAnalysisDoc, deleteAnalysisDoc } from './analysis-service.mjs'
+import { buildProposalData, generatePdf } from './pdf-service.mjs'
 
 loadEnv()
 
@@ -1612,7 +1613,13 @@ async function handlePublicGetContent(req, res, slug, url) {
 async function handleGetSiteConfig(req, res) {
   const siteId = await resolvePublicSiteId(req)
   const config = await getSiteConfig(siteId)
-  sendJson(req, res, 200, { theme: config.theme || 'default', siteId })
+  sendJson(req, res, 200, {
+    siteId,
+    theme:      config.theme      || 'default',
+    siteName:   config.siteName   || '',
+    logoUrl:    config.logoUrl    || '',
+    faviconUrl: config.faviconUrl || '',
+  })
 }
 
 async function handleUpdateSiteTheme(req, res) {
@@ -2008,6 +2015,37 @@ COMPANY_COLORS 참고: 흥국화재=#2A3E66, 라이나생명=#5C2A66, KB손해�
   sendJson(req, res, 200, { ok: true, proposalData })
 }
 
+async function handleGeneratePdf(req, res, id) {
+  const session = await checkAdmin(req, res)
+  if (!session) return
+
+  const doc = await getAnalysisDoc(id)
+  if (!doc) { sendError(req, res, 404, 'Not found'); return }
+  if (!doc.analysisResult && !doc.proposalData) {
+    sendError(req, res, 400, '먼저 분석(LLM)을 실행하세요'); return
+  }
+
+  // Use existing proposalData if available, otherwise build deterministically
+  let proposalData = doc.proposalData
+  if (!proposalData) {
+    proposalData = await buildProposalData(doc.analysisResult, doc.customerName, doc.agentName)
+    await updateAnalysisDoc(id, { proposalData })
+  }
+
+  const { uploadDir, defaultSiteId } = getConfig()
+
+  let pdfResult
+  try {
+    pdfResult = await generatePdf(proposalData, uploadDir, defaultSiteId, doc.title || id)
+  } catch (err) {
+    sendError(req, res, 500, `PDF 생성 실패: ${err instanceof Error ? err.message : String(err)}`)
+    return
+  }
+
+  await updateAnalysisDoc(id, { pdfPath: pdfResult.urlPath })
+  sendJson(req, res, 200, { ok: true, pdfPath: pdfResult.urlPath })
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function handleRequest(req, res) {
@@ -2283,11 +2321,12 @@ async function handleRequest(req, res) {
       if (req.method === 'PUT') { await handleUpdateAnalysis(req, res, analysisIdMatch[1]); return }
       if (req.method === 'DELETE') { await handleDeleteAnalysis(req, res, analysisIdMatch[1]); return }
     }
-    const analysisActionMatch = url.pathname.match(/^\/api\/analysis\/([^/]+)\/(analyze|generate)$/)
+    const analysisActionMatch = url.pathname.match(/^\/api\/analysis\/([^/]+)\/(analyze|generate|generate-pdf)$/)
     if (analysisActionMatch && req.method === 'POST') {
       const [, id, action] = analysisActionMatch
-      if (action === 'analyze') { await handleAnalyzeInsurance(req, res, id); return }
-      if (action === 'generate') { await handleGenerateProposal(req, res, id); return }
+      if (action === 'analyze')       { await handleAnalyzeInsurance(req, res, id);  return }
+      if (action === 'generate')      { await handleGenerateProposal(req, res, id);  return }
+      if (action === 'generate-pdf')  { await handleGeneratePdf(req, res, id);       return }
     }
 
     sendError(req, res, 404, 'Not found')

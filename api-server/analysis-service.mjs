@@ -22,6 +22,7 @@ export async function listAnalysisDocs() {
       $project: {
         title: 1, customerName: 1, agentName: 1,
         existingInsurancePdf: 1, proposalPdfs: 1, note: 1,
+        pdfPath: 1,
         createdAt: 1, updatedAt: 1,
         hasAnalysis: { $cond: [{ $ne: ['$analysisResult', null] }, true, false] },
         hasProposal: { $cond: [{ $ne: ['$proposalData', null] }, true, false] },
@@ -60,7 +61,7 @@ export async function updateAnalysisDoc(id, data) {
   const c = await col()
   const set = { updatedAt: new Date() }
   const allowed = ['title', 'customerName', 'agentName', 'existingInsurancePdf',
-    'proposalPdfs', 'note', 'analysisResult', 'proposalData']
+    'proposalPdfs', 'note', 'analysisResult', 'proposalData', 'pdfPath']
   for (const f of allowed) {
     if (data[f] !== undefined) set[f] = data[f]
   }

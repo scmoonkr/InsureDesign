@@ -1,6 +1,6 @@
-<template>
+﻿<template>
   <div class="theme-default">
-    <DefaultThemeTopbar title="Korean Swimming Registry" :items="navItems" />
+    <DefaultThemeTopbar :items="navItems" />
 
     <DefaultThemeHero
       eyebrow="01 · The Index · Default Theme"

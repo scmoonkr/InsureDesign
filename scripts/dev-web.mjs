@@ -26,7 +26,7 @@ const webPort = String(process.env.NUXT_PORT || getPortFromUrl(process.env.SITE_
 const command = process.execPath
 const nuxiPath = path.join(rootDir, 'node_modules', '@nuxt', 'cli', 'bin', 'nuxi.mjs')
 
-const child = spawn(command, [nuxiPath, 'dev'], {
+const child = spawn(command, [nuxiPath, 'dev', '--port', webPort], {
   env: {
     ...process.env,
     API_PORT: apiPort,

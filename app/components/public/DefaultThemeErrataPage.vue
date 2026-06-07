@@ -1,6 +1,6 @@
-<template>
+﻿<template>
   <div class="theme-default">
-    <DefaultThemeTopbar title="Korean Swimming Registry" :items="navItems" />
+    <DefaultThemeTopbar :items="navItems" />
 
     <section class="theme-stub">
       <div class="theme-eyebrow">02 · The Errata · Corrections</div>

@@ -1,6 +1,6 @@
-<template>
+﻿<template>
   <div class="theme-default">
-    <DefaultThemeTopbar title="Korean Swimming Registry" :items="navItems" />
+    <DefaultThemeTopbar :items="navItems" />
 
     <main class="theme-auth-page">
       <section class="theme-auth-panel">

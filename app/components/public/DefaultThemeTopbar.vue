@@ -10,8 +10,8 @@
       ]"
     >
       <NuxtLink class="theme-brand" to="/theme/default">
-        <img class="theme-logo" :src="logoSrc" alt="Default theme logo" />
-        <span class="theme-brand-text">{{ title }}</span>
+        <img class="theme-logo" :src="logoSrc" alt="site logo" />
+        <span class="theme-brand-text">{{ displayTitle }}</span>
       </NuxtLink>
 
       <div v-if="toolbarTitle && !backendMode" class="theme-topbar-title">{{ toolbarTitle }}</div>
@@ -104,7 +104,7 @@
 
 <script setup lang="ts">
 const props = defineProps<{
-  title: string
+  title?: string
   fullWidth?: boolean
   backendMode?: boolean
   toolbarTitle?: string
@@ -128,8 +128,15 @@ const emit = defineEmits<{
   (e: 'backend-menu-toggle'): void
 }>()
 
-const logoSrc = '/themes/default/logo.png'
-const apiBase = useApiBase()
+const apiBase    = useApiBase()
+const siteConfig = useSiteConfig()
+
+const displayTitle = computed(() => props.title || siteConfig.value.siteName)
+const logoSrc = computed(() => {
+  const raw = siteConfig.value.logoUrl
+  if (!raw) return '/themes/default/logo.png'
+  return raw.startsWith('http') ? raw : `${apiBase}${raw}`
+})
 const authMeUrl = `${apiBase}/api/auth/me`
 const logoutUrl = `${apiBase}/api/auth/logout`
 

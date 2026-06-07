@@ -6,6 +6,13 @@
         <span class="ip-bar-title">{{ pageTitle }}</span>
       </div>
       <div class="ip-bar-right">
+        <a
+          v-if="pdfUrl"
+          :href="pdfUrl"
+          target="_blank"
+          rel="noopener"
+          class="ip-btn ip-btn-secondary"
+        >📄 PDF 보기</a>
         <button type="button" class="ip-btn ip-btn-primary" @click="print">🖨 인쇄</button>
       </div>
     </div>
@@ -40,6 +47,9 @@ const viewport  = ref<HTMLElement | null>(null)
 const pending   = ref(true)
 const loadError = ref('')
 const record    = ref<any>(null)
+const pdfUrl    = computed(() =>
+  record.value?.pdfPath ? `${apiBase}${record.value.pdfPath}` : '',
+)
 const pageTitle = computed(() =>
   record.value
     ? `${record.value.customerName || ''} · ${record.value.title || '보험 설계서'}`

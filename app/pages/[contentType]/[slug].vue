@@ -1,6 +1,6 @@
 <template>
   <div class="theme-default">
-    <DefaultThemeTopbar title="Korean Swimming Registry" :items="navItems" />
+    <DefaultThemeTopbar :items="navItems" />
 
     <main :class="['public-content-shell', { 'public-content-shell-flush': isPage && showEyebrow }]">
       <template v-if="content">

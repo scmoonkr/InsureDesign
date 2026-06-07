@@ -1,7 +1,6 @@
-<template>
+﻿<template>
   <div class="theme-backend">
     <DefaultThemeTopbar
-      title="Korean Swimming Registry"
       :items="navItems"
       full-width
       backend-mode
@@ -41,6 +40,7 @@
                 <th>설계서</th>
                 <th>분석여부</th>
                 <th>생성여부</th>
+                <th>PDF</th>
                 <th>등록일</th>
               </tr>
             </thead>
@@ -58,6 +58,16 @@
                 <td class="theme-meta">{{ row.proposalPdfs?.length || 0 }}개</td>
                 <td class="theme-meta">{{ (row as any).hasAnalysis ? '✓' : '—' }}</td>
                 <td class="theme-meta">{{ (row as any).hasProposal ? '✓' : '—' }}</td>
+                <td class="theme-meta" @click.stop>
+                  <a
+                    v-if="row.pdfPath"
+                    :href="`${apiBase}${row.pdfPath}`"
+                    target="_blank"
+                    rel="noopener"
+                    class="ia-table-pdf-link"
+                  >PDF</a>
+                  <span v-else>—</span>
+                </td>
                 <td class="theme-meta">{{ formatDate(row.createdAt) }}</td>
               </tr>
             </tbody>
@@ -166,6 +176,21 @@
             </label>
           </div>
 
+          <!-- 생성된 PDF -->
+          <div v-if="form.pdfPath" class="ia-section">
+            <div class="ia-section-title">생성된 PDF</div>
+            <div class="ia-pdf-slot">
+              <a
+                :href="`${apiBase}${form.pdfPath}`"
+                target="_blank"
+                rel="noopener"
+                class="ia-pdf-chip ia-pdf-link"
+              >
+                📄 제안서 PDF 열기
+              </a>
+            </div>
+          </div>
+
           <!-- 분석 결과 미리보기 -->
           <div v-if="form.analysisResult" class="ia-section ia-analysis-preview">
             <div class="ia-section-title">분석 결과</div>
@@ -205,7 +230,7 @@
               class="ia-btn ia-btn-primary"
               :disabled="isBusy"
               @click="generateProposal"
-            >{{ isBusy && busyAction === 'generate' ? '생성 중...' : '생성 ▶' }}</button>
+            >{{ isBusy && busyAction === 'generate' ? 'PDF 생성 중...' : (form.pdfPath ? 'PDF 재생성 ▶' : 'PDF 생성 ▶') }}</button>
           </div>
         </div>
       </div>
@@ -231,6 +256,7 @@ type AnalysisItem = {
   note: string
   analysisResult: unknown
   proposalData: unknown
+  pdfPath: string | null
   createdAt: string
   updatedAt: string
 }
@@ -269,6 +295,7 @@ type FormState = {
   note: string
   analysisResult: unknown
   proposalData: unknown
+  pdfPath: string | null
 }
 
 const form = ref<FormState>({
@@ -280,6 +307,7 @@ const form = ref<FormState>({
   note: '',
   analysisResult: null,
   proposalData: null,
+  pdfPath: null,
 })
 
 function blankForm(): FormState {
@@ -292,6 +320,7 @@ function blankForm(): FormState {
     note: '',
     analysisResult: null,
     proposalData: null,
+    pdfPath: null,
   }
 }
 
@@ -315,6 +344,7 @@ async function openEdit(row: AnalysisItem) {
     note: row.note,
     analysisResult: null,
     proposalData: null,
+    pdfPath: row.pdfPath ?? null,
   }
   drawerId.value = row.id
   isNewMode.value = false
@@ -329,6 +359,7 @@ async function openEdit(row: AnalysisItem) {
     if (res?.item) {
       form.value.analysisResult = res.item.analysisResult ?? null
       form.value.proposalData = res.item.proposalData ?? null
+      form.value.pdfPath = res.item.pdfPath ?? null
     }
   } catch { /* 실패해도 drawer는 유지 */ }
 }
@@ -478,8 +509,26 @@ async function analyzeRecord() {
   }
 }
 
-function generateProposal() {
-  window.open(`/analysis?id=${drawerId.value}`, '_blank')
+async function generateProposal() {
+  isBusy.value = true
+  busyAction.value = 'generate'
+  statusMsg.value = ''
+  isError.value = false
+  try {
+    const res = await $fetch<{ ok: boolean; pdfPath: string }>(
+      `${apiBase}/api/analysis/${drawerId.value}/generate-pdf`,
+      { method: 'POST', credentials: 'include' },
+    )
+    form.value.pdfPath = res.pdfPath
+    await refresh()
+    statusMsg.value = 'PDF 생성 완료'
+  } catch (err: unknown) {
+    isError.value = true
+    statusMsg.value = err instanceof Error ? err.message : 'PDF 생성 실패'
+  } finally {
+    isBusy.value = false
+    busyAction.value = ''
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -576,6 +625,26 @@ function formatDate(iso?: string) {
 .ia-pdf-btn:disabled { opacity: .5; cursor: not-allowed; }
 
 .ia-pdf-empty { color: var(--theme-muted, #aaa); font-size: 13px; }
+
+.ia-pdf-link {
+  text-decoration: none;
+  color: var(--theme-ink, #333);
+  flex: 1;
+}
+.ia-pdf-link:hover { background: var(--theme-bg-3, #eaeaea); }
+
+.ia-table-pdf-link {
+  display: inline-block;
+  padding: 2px 8px;
+  background: #2a3e66;
+  color: #fff;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  letter-spacing: .04em;
+}
+.ia-table-pdf-link:hover { background: #1e2f52; }
 
 .ia-analysis-preview {
   background: var(--theme-bg-2, #f8f8f8);

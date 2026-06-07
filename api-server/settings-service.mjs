@@ -5,7 +5,7 @@ const SETTINGS_FIELDS = ['siteName', 'siteUrl', 'description', 'logoUrl', 'favic
 export async function getSiteConfig(siteId) {
   const db = await getMongoDb()
   const doc = await db.collection('settings').findOne({ siteId })
-  return { theme: 'default', ...doc }
+  return { theme: 'default', siteName: '', logoUrl: '', faviconUrl: '', ...doc }
 }
 
 export async function updateSiteTheme(siteId, theme) {

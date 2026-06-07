@@ -1,7 +1,14 @@
 <template>
   <div class="ip-block">
     <div v-if="loadError" class="ip-block-error">{{ loadError }}</div>
-    <div v-else ref="viewport" class="viewport" />
+    <template v-else>
+      <div v-if="pdfUrl" class="ip-pdf-bar">
+        <a :href="pdfUrl" target="_blank" rel="noopener" class="ip-pdf-btn">
+          📄 제안서 PDF 보기
+        </a>
+      </div>
+      <div ref="viewport" class="viewport" />
+    </template>
   </div>
 </template>
 
@@ -18,6 +25,7 @@ const props = defineProps<{
 const apiBase = useApiBase()
 const viewport = ref<HTMLElement | null>(null)
 const loadError = ref('')
+const pdfUrl = ref('')
 
 useHead({
   link: [
@@ -50,6 +58,10 @@ onMounted(async () => {
     const item = res?.item
     if (!item) { loadError.value = '레코드를 찾을 수 없습니다'; return }
 
+    if (item.pdfPath) {
+      pdfUrl.value = `${apiBase}${item.pdfPath}`
+    }
+
     let data
     if (item.proposalData) {
       data = item.proposalData
@@ -78,6 +90,31 @@ onMounted(async () => {
 .ip-block {
   background: var(--bg-outer, #E8D6B4);
   overflow-x: auto;
+}
+
+.ip-pdf-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 20px 0;
+}
+
+.ip-pdf-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background: rgba(34, 25, 18, 0.85);
+  color: #E5A862;
+  border: 1px solid rgba(229, 168, 98, 0.4);
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  letter-spacing: 0.03em;
+  transition: background 0.15s;
+}
+.ip-pdf-btn:hover {
+  background: rgba(34, 25, 18, 1);
 }
 
 .ip-block-error {

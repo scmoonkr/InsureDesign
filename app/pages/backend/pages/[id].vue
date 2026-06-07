@@ -1,7 +1,7 @@
 <template>
   <div class="theme-backend">
     <DefaultThemeTopbar
-      title="Korean Swimming Registry"
+     
       :items="navItems"
       full-width
       backend-mode

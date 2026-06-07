@@ -1,6 +1,6 @@
 <template>
   <div class="theme-default">
-    <DefaultThemeTopbar title="Korean Swimming Registry" :items="navItems" />
+    <DefaultThemeTopbar :items="navItems" />
 
     <main class="category-shell">
       <template v-if="tag">
