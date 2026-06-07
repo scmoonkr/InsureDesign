@@ -209,14 +209,14 @@ Use this space for a longer paragraph that describes your offering in more detai
 					<p class="text-gray-700 mb-4">
 						간편한 입력과 정확한 분석으로 고객이 가입한 보험사별 상품의 보장비교가 가능한 보장분석 시스템입니다.
 					</p>
-					<img src="/Images/interview3_img2.jpg" class="w-full rounded mb-8" alt="G-솔루션 이미지" />
+					<img :src="'/Images/interview3_img2.jpg'" class="w-full rounded mb-8" alt="G-솔루션 이미지" />
 
 					<!-- OK마이보험 -->
 					<h3 class="text-lg font-semibold text-blue-600 mb-2">- OK마이보험</h3>
 					<p class="text-gray-700 mb-4">
 						스마트폰 어플로 간단하게 고객의 보장자산을 확인하고 현장에서 고객과의 활동을 지원하는 TOOL입니다.
 					</p>
-					<img src="/Images/interview3_img3.jpg" class="w-full rounded mb-8" alt="OK마이보험 이미지" />
+					<img :src="'/Images/interview3_img3.jpg'" class="w-full rounded mb-8" alt="OK마이보험 이미지" />
 				</div>
 
 				<!-- 영업지원 -->
