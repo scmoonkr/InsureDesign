@@ -109,7 +109,7 @@
             <div class="ia-pdf-slot">
               <div v-if="form.existingInsurancePdf" class="ia-pdf-chip">
                 <span>📄 {{ form.existingInsurancePdf.originalName }}</span>
-                <button type="button" class="ia-pdf-remove" @click="form.existingInsurancePdf = null">×</button>
+                <button type="button" class="ia-pdf-remove" @click="removeExistingPdf">×</button>
               </div>
               <button
                 v-else
@@ -389,6 +389,30 @@ async function uploadPdf(file: File): Promise<PdfFile> {
   })
 }
 
+// PDF 변경(선택/삭제)을 즉시 서버(DB)에 반영. 새 레코드면 생성, 기존이면 갱신.
+// → 분석(LLM)이 DB의 PDF를 바로 읽을 수 있고, 재설정 시 최종 것만 DB에 남는다.
+async function persistPdfFields(): Promise<boolean> {
+  try {
+    if (isNewMode.value) {
+      const res = await $fetch<{ item: AnalysisItem }>(`${apiBase}/api/analysis`, {
+        method: 'POST', credentials: 'include', body: formPayload(),
+      })
+      drawerId.value = res.item.id
+      isNewMode.value = false
+    } else {
+      await $fetch(`${apiBase}/api/analysis/${drawerId.value}`, {
+        method: 'PUT', credentials: 'include', body: formPayload(),
+      })
+    }
+    await refresh()
+    return true
+  } catch {
+    isError.value = true
+    statusMsg.value = 'PDF 서버 저장 실패'
+    return false
+  }
+}
+
 async function onPdfSelected(slot: string, event: Event) {
   const input = event.target as HTMLInputElement
   const file = input.files?.[0]
@@ -396,6 +420,7 @@ async function onPdfSelected(slot: string, event: Event) {
   input.value = ''
   uploadingSlot.value = slot
   statusMsg.value = ''
+  isError.value = false
   try {
     const result = await uploadPdf(file)
     if (slot === 'existing') {
@@ -406,6 +431,8 @@ async function onPdfSelected(slot: string, event: Event) {
       updated[idx] = result
       form.value.proposalPdfs = updated
     }
+    // 업로드 직후 서버에 즉시 저장 (재설정 시 최종 것만 보관됨)
+    if (await persistPdfFields()) statusMsg.value = 'PDF 저장됨'
   } catch {
     isError.value = true
     statusMsg.value = 'PDF 업로드 실패'
@@ -414,7 +441,14 @@ async function onPdfSelected(slot: string, event: Event) {
   }
 }
 
-function removeProposalPdf(idx: number) {
+async function removeExistingPdf() {
+  form.value.existingInsurancePdf = null
+  statusMsg.value = ''
+  isError.value = false
+  if (await persistPdfFields()) statusMsg.value = 'PDF 삭제됨'
+}
+
+async function removeProposalPdf(idx: number) {
   const updated = [...form.value.proposalPdfs] as (PdfFile | null)[]
   updated[idx] = null
   // compact: shift nulls to end
@@ -425,6 +459,9 @@ function removeProposalPdf(idx: number) {
     filled[2] ?? null,
     filled[3] ?? null,
   ]
+  statusMsg.value = ''
+  isError.value = false
+  if (await persistPdfFields()) statusMsg.value = 'PDF 삭제됨'
 }
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
@@ -492,17 +529,23 @@ async function analyzeRecord() {
   busyAction.value = 'analyze'
   statusMsg.value = ''
   isError.value = false
+  const url = `${apiBase}/api/analysis/${drawerId.value}/analyze`
+  const t0 = Date.now()
+  console.log('[analyze] ▶ 요청 시작', { id: drawerId.value, url })
   try {
     const res = await $fetch<{ analysisResult: unknown }>(
-      `${apiBase}/api/analysis/${drawerId.value}/analyze`,
+      url,
       { method: 'POST', credentials: 'include' },
     )
+    console.log(`[analyze] ✔ 응답 수신 (${Date.now() - t0}ms)`, res)
     form.value.analysisResult = res.analysisResult
     await refresh()
     statusMsg.value = '분석 완료'
+    console.log('[analyze] ✅ 완료 — analysisResult 저장됨')
   } catch (err: unknown) {
     isError.value = true
     statusMsg.value = err instanceof Error ? err.message : '분석 실패'
+    console.error(`[analyze] ✖ 실패 (${Date.now() - t0}ms)`, err)
   } finally {
     isBusy.value = false
     busyAction.value = ''

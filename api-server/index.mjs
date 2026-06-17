@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createHash } from 'node:crypto'
 import { mkdir, writeFile, readFile } from 'node:fs/promises'
-import { URL } from 'node:url'
+import { URL, fileURLToPath } from 'node:url'
 import { ObjectId } from 'mongodb'
 import { getMongoDb } from './mongo.mjs'
 import { clearAuthSession, createOAuthState, getAuthSession, setAuthSession, verifyOAuthState } from './auth-session.mjs'
@@ -217,6 +217,13 @@ function validateProfileInput(input) {
 async function handleAuthMe(req, res) {
   const session = getAuthSession(req)
   if (!session) {
+    // TEMP(dev): AUTH_BYPASS lets the frontend backend-guard pass without login.
+    if (getConfig().authBypass) {
+      sendJson(req, res, 200, {
+        user: { id: '000000000000000000000000', provider: 'dev', name: '개발자(임시)', email: 'dev@local', roles: [{ role: 'super' }], status: 'active' },
+      })
+      return
+    }
     sendJson(req, res, 200, { user: null })
     return
   }
@@ -1867,13 +1874,25 @@ function urlPathToFilePath(urlPath, uploadDir) {
   return path.resolve(uploadDir, rel)
 }
 
-async function callClaudeApi(messages, systemPrompt, maxTokens = 4096) {
+const ANALYSIS_PROMPT_PATH = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../docs/보험분석_prompt.md',
+)
+let analysisPromptCache = null
+async function loadAnalysisPrompt() {
+  if (analysisPromptCache == null) {
+    analysisPromptCache = await readFile(ANALYSIS_PROMPT_PATH, 'utf8')
+  }
+  return analysisPromptCache
+}
+
+async function callClaudeApi(messages, systemPrompt, maxTokens = 4096, model = 'claude-sonnet-4-6') {
   const { anthropicApiKey } = getConfig()
   if (!anthropicApiKey) {
     throw Object.assign(new Error('ANTHROPIC_API_KEY가 설정되지 않았습니다'), { statusCode: 500 })
   }
   const bodyStr = JSON.stringify({
-    model: 'claude-opus-4-8',
+    model,
     max_tokens: maxTokens,
     system: systemPrompt,
     messages,
@@ -1907,10 +1926,13 @@ async function callClaudeApi(messages, systemPrompt, maxTokens = 4096) {
 }
 
 async function handleAnalyzeInsurance(req, res, id) {
+  const t0 = Date.now()
+  console.log(`\n[analyze] ▶ 시작 id=${id}`)
   const session = await checkAdmin(req, res)
   if (!session) return
   const doc = await getAnalysisDoc(id)
-  if (!doc) { sendError(req, res, 404, 'Not found'); return }
+  if (!doc) { console.log('[analyze] ✖ 문서 없음'); sendError(req, res, 404, 'Not found'); return }
+  console.log(`[analyze] 문서 로드: 고객='${doc.customerName || ''}' 설계사='${doc.agentName || ''}' 기존PDF=${doc.existingInsurancePdf ? 'Y' : 'N'} 설계PDF=${(doc.proposalPdfs || []).filter(Boolean).length}개`)
   const { uploadDir } = getConfig()
 
   const content = []
@@ -1924,7 +1946,10 @@ async function handleAnalyzeInsurance(req, res, id) {
         source: { type: 'base64', media_type: 'application/pdf', data: data.toString('base64') },
         title,
       })
-    } catch { /* 파일 없으면 skip */ }
+      console.log(`[analyze]   + PDF 첨부: '${title}' (${(data.length / 1024).toFixed(0)} KB)`)
+    } catch (e) {
+      console.log(`[analyze]   ! PDF 읽기 실패(skip): '${title}' ${pdfInfo.urlPath} — ${e.message}`)
+    }
   }
 
   await addPdf(doc.existingInsurancePdf, '기존보험내역')
@@ -1932,27 +1957,51 @@ async function handleAnalyzeInsurance(req, res, id) {
     await addPdf(doc.proposalPdfs[i], `보험설계서 ${i + 1}: ${doc.proposalPdfs[i]?.originalName || ''}`)
   }
 
-  if (content.length === 0) { sendError(req, res, 400, '분석할 PDF 파일이 없습니다'); return }
+  if (content.length === 0) {
+    console.log('[analyze] ✖ 첨부된 PDF 없음 → 400')
+    sendError(req, res, 400, '분석할 PDF 파일이 없습니다'); return
+  }
 
   content.push({
     type: 'text',
-    text: `고객명: ${doc.customerName}, 설계사: ${doc.agentName}\n\n위 보험 문서를 분석하여 아래 JSON 형식으로만 반환하세요 (설명 없이):\n{\n  "customer": { "name": "", "age": 0, "gender": "", "contractor": "" },\n  "existingInsurance": { "summary": "", "companies": [], "monthlyTotal": 0, "coverageGaps": [] },\n  "proposals": [{ "company": "", "product": "", "monthlyPremium": 0, "coverage": [], "keyBenefits": [], "role": "", "epithet": "" }],\n  "recommendations": { "summary": "", "totalMonthly": 0, "strategy": "" }\n}`,
+    text: `보험 설계 화면의 입력 정보:\n- 계약자/고객명: ${doc.customerName || ''}\n- 설계사명: ${doc.agentName || ''}\n- 설계 note: ${doc.note || ''}\n\n위 기존 보험내역 및 보험설계서 PDF를 시스템 프롬프트의 규칙에 따라 분석하여, 설명 없이 순수 JSON만 생성하세요.`,
   })
 
-  const response = await callClaudeApi(
-    [{ role: 'user', content }],
-    '당신은 한국 보험 전문가입니다. 보험 문서를 분석하고 정확한 JSON만 반환합니다.',
-    4096,
-  )
+  const systemPrompt = await loadAnalysisPrompt()
+  console.log(`[analyze] 프롬프트 로드: ${systemPrompt.length} chars | content 블록 ${content.length}개 (PDF ${content.length - 1} + text 1)`)
+  console.log('[analyze] → Claude 호출 (model=claude-sonnet-4-6, max_tokens=16000) ...')
+
+  let response
+  try {
+    response = await callClaudeApi(
+      [{ role: 'user', content }],
+      [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+      16000,
+      'claude-sonnet-4-6',
+    )
+  } catch (e) {
+    console.log(`[analyze] ✖ Claude 호출 실패: ${e.message}`)
+    throw e
+  }
+
+  const usage = response.usage || {}
+  console.log(`[analyze] ← Claude 응답: stop_reason=${response.stop_reason} usage(in=${usage.input_tokens} out=${usage.output_tokens} cache_read=${usage.cache_read_input_tokens ?? 0})`)
 
   const rawText = response.content?.[0]?.text || ''
+  console.log(`[analyze] 응답 텍스트 길이: ${rawText.length} chars`)
   let analysisResult
   try {
     const m = rawText.match(/\{[\s\S]*\}/)
     analysisResult = JSON.parse(m?.[0] || rawText)
-  } catch { analysisResult = { raw: rawText } }
+    const pages = Array.isArray(analysisResult.pages) ? analysisResult.pages.length : 0
+    console.log(`[analyze] ✔ JSON 파싱 성공: top-keys=[${Object.keys(analysisResult).join(', ')}] pages=${pages}`)
+  } catch (e) {
+    analysisResult = { raw: rawText }
+    console.log(`[analyze] ✖ JSON 파싱 실패: ${e.message} (raw 일부: ${rawText.slice(0, 120)}...)`)
+  }
 
   await updateAnalysisDoc(id, { analysisResult })
+  console.log(`[analyze] ✅ 저장 완료 id=${id} (${Date.now() - t0}ms)`)
   sendJson(req, res, 200, { ok: true, analysisResult })
 }
 

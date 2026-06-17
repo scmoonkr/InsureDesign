@@ -64,5 +64,7 @@ export function getConfig() {
       .map(o => o.trim().replace(/\/$/, ''))
       .filter(Boolean),
     anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+    // TEMP(dev): when 'true', skip login/role checks for backend access. Never set on production.
+    authBypass: process.env.AUTH_BYPASS === 'true',
   }
 }
