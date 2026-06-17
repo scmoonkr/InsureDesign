@@ -80,7 +80,7 @@ async function buildFontCss() {
   }
 
   if (rules.length === 0) return ''
-  return rules.join('\n') + `\n* { font-family: 'Pretendard Variable', 'Pretendard', sans-serif; }`
+  return rules.join('\n') + `\n* { font-family: 'Pretendard Variable', 'Pretendard', 'Noto Sans CJK KR', 'Noto Serif CJK KR', sans-serif; }`
 }
 
 const PRINT_CSS = `
