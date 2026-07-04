@@ -209,13 +209,15 @@ const RENDERERS = {
 
   // 4. Issue List
   issueList(page) {
+    const body = page.body || {}
+    const issues = body.issues || page.issues || []
     return h('div', { class: 'body' }, [
       h('div', null, [
         pageTitle(page.title, 'page-title'),
         page.description ? h('p', { class: 'desc' }, nl2br(page.description)) : null,
       ]),
       h('div', { class: 'grid' },
-        page.issues.map(it => h('div', { class: 'issue' }, [
+        issues.map(it => h('div', { class: 'issue' }, [
           h('div', { class: 'nm' }, it.num),
           h('div', null, [
             h('h4', null, nl2br(it.heading)),
@@ -231,11 +233,12 @@ const RENDERERS = {
 
   // 5. Section Cover
   sectionCover(page, data) {
+    const cover = (page.body && page.body.cover) || page.cover || {}
     return h('div', { class: 'body' }, [
       h('div', { class: 'cover-wrap' }, [
-        h('h1', { class: 'cover-title' }, nl2br(page.cover.title)),
+        h('h1', { class: 'cover-title' }, nl2br(cover.title)),
         h('div', { class: 'cover-side' }, [
-          h('p', { class: 'cover-desc' }, nl2br(page.cover.description)),
+          h('p', { class: 'cover-desc' }, nl2br(cover.description)),
           h('div', { class: 'meta-grid' }, [
             h('div', { class: 'k' }, 'Customer'),
             h('div', { class: 'v' }, `${data.customer.name} (${data.customer.age}, ${data.customer.gender})`),
@@ -717,11 +720,57 @@ function renderPage(page, data, pageNum, total) {
   }, [renderHead(page, data, pageNum, total), body, renderFoot(page, data, pageNum, total)])
 }
 
+// ─── Fit-to-page ──────────────────────────────────────────────────────────────
+// 본문(.body)이 head/foot 사이 영역을 넘치면 살짝 축소해 footer와 겹치지 않게.
+// LLM 출력 길이가 가변적이므로 클리핑 대신 비율 축소로 처리(텍스트 잘림 없음).
+function fitBodyToPage(section) {
+  const body = section.querySelector(':scope > .body')
+  if (!body) return
+  body.style.transform = ''
+  body.style.transformOrigin = ''
+  const avail = body.clientHeight
+  if (!avail) return
+  const need = body.scrollHeight
+  if (need > avail + 1) {
+    const k = Math.max(0.62, avail / need)
+    body.style.transformOrigin = 'top center'
+    body.style.transform = `scale(${k})`
+  }
+}
+
+function fitAllPages(viewportEl) {
+  const sections = viewportEl.querySelectorAll(':scope > .page')
+  sections.forEach(fitBodyToPage)
+}
+
 // ─── Public entry point ───────────────────────────────────────────────────────
 export function renderProposal(data, viewportEl) {
   if (!viewportEl) return
   viewportEl.innerHTML = ''
   const total = data.pages.length
   // pageNo 순 정렬은 index.vue에서 이미 처리 → 배열 순서 그대로 1-based 순번 부여
-  data.pages.forEach((p, i) => viewportEl.appendChild(renderPage(p, data, i + 1, total)))
+  // 한 페이지 렌더 오류가 이후 전체 페이지를 누락시키지 않도록 페이지 단위로 격리.
+  data.pages.forEach((p, i) => {
+    try {
+      viewportEl.appendChild(renderPage(p, data, i + 1, total))
+    } catch (err) {
+      console.error(`[renderProposal] page #${i + 1} (${p && p.type}) 렌더 실패:`, err)
+      viewportEl.appendChild(h('section', { class: 'page' }, [
+        h('div', { class: 'body' }, h('p', null, `Render error on page ${i + 1} (${p && p.type}): ${err && err.message}`)),
+      ]))
+    }
+  })
+
+  // 폰트 로딩 후 측정해야 정확. PDF(Puppeteer)에서는 window.__fitPages로 명시 호출.
+  const run = () => fitAllPages(viewportEl)
+  if (typeof window !== 'undefined') {
+    window.__fitPages = run
+    if (window.document && window.document.fonts && window.document.fonts.ready) {
+      window.document.fonts.ready.then(run)
+    } else {
+      run()
+    }
+  } else {
+    run()
+  }
 }

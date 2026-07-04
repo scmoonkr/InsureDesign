@@ -1925,6 +1925,45 @@ async function callClaudeApi(messages, systemPrompt, maxTokens = 4096, model = '
   })
 }
 
+// OpenAI Chat Completions 호출 (PDF는 content의 file 파트로 전달, JSON 모드).
+async function callOpenAiApi(messages, maxTokens = 16000, model) {
+  const { openaiApiKey, openaiModel } = getConfig()
+  if (!openaiApiKey) {
+    throw Object.assign(new Error('OPENAI_API_KEY가 설정되지 않았습니다'), { statusCode: 500 })
+  }
+  const bodyStr = JSON.stringify({
+    model: model || openaiModel,
+    max_completion_tokens: maxTokens,
+    response_format: { type: 'json_object' },
+    messages,
+  })
+  return new Promise((resolve, reject) => {
+    const req = https.request({
+      hostname: 'api.openai.com',
+      path: '/v1/chat/completions',
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'authorization': `Bearer ${openaiApiKey}`,
+        'content-length': Buffer.byteLength(bodyStr),
+      },
+    }, (res) => {
+      const chunks = []
+      res.on('data', c => chunks.push(c))
+      res.on('end', () => {
+        try {
+          const data = JSON.parse(Buffer.concat(chunks).toString())
+          if (data.error) reject(new Error(data.error.message || 'OpenAI API error'))
+          else resolve(data)
+        } catch (e) { reject(e) }
+      })
+    })
+    req.on('error', reject)
+    req.write(bodyStr)
+    req.end()
+  })
+}
+
 async function handleAnalyzeInsurance(req, res, id) {
   const t0 = Date.now()
   console.log(`\n[analyze] ▶ 시작 id=${id}`)
@@ -1942,9 +1981,11 @@ async function handleAnalyzeInsurance(req, res, id) {
     try {
       const data = await readFile(urlPathToFilePath(pdfInfo.urlPath, uploadDir))
       content.push({
-        type: 'document',
-        source: { type: 'base64', media_type: 'application/pdf', data: data.toString('base64') },
-        title,
+        type: 'file',
+        file: {
+          filename: pdfInfo.originalName || `${title}.pdf`,
+          file_data: `data:application/pdf;base64,${data.toString('base64')}`,
+        },
       })
       console.log(`[analyze]   + PDF 첨부: '${title}' (${(data.length / 1024).toFixed(0)} KB)`)
     } catch (e) {
@@ -1968,26 +2009,29 @@ async function handleAnalyzeInsurance(req, res, id) {
   })
 
   const systemPrompt = await loadAnalysisPrompt()
+  const { openaiModel } = getConfig()
   console.log(`[analyze] 프롬프트 로드: ${systemPrompt.length} chars | content 블록 ${content.length}개 (PDF ${content.length - 1} + text 1)`)
-  console.log('[analyze] → Claude 호출 (model=claude-sonnet-4-6, max_tokens=16000) ...')
+  console.log(`[analyze] → OpenAI 호출 (model=${openaiModel}, max_completion_tokens=16000) ...`)
 
   let response
   try {
-    response = await callClaudeApi(
-      [{ role: 'user', content }],
-      [{ type: 'text', text: systemPrompt, cache_control: { type: 'ephemeral' } }],
+    response = await callOpenAiApi(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content },
+      ],
       16000,
-      'claude-sonnet-4-6',
     )
   } catch (e) {
-    console.log(`[analyze] ✖ Claude 호출 실패: ${e.message}`)
+    console.log(`[analyze] ✖ OpenAI 호출 실패: ${e.message}`)
     throw e
   }
 
   const usage = response.usage || {}
-  console.log(`[analyze] ← Claude 응답: stop_reason=${response.stop_reason} usage(in=${usage.input_tokens} out=${usage.output_tokens} cache_read=${usage.cache_read_input_tokens ?? 0})`)
+  const choice = response.choices?.[0] || {}
+  console.log(`[analyze] ← OpenAI 응답: finish_reason=${choice.finish_reason} usage(prompt=${usage.prompt_tokens} completion=${usage.completion_tokens})`)
 
-  const rawText = response.content?.[0]?.text || ''
+  const rawText = choice.message?.content || ''
   console.log(`[analyze] 응답 텍스트 길이: ${rawText.length} chars`)
   let analysisResult
   try {

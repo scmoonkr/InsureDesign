@@ -434,6 +434,8 @@ export async function generatePdf(proposalData, uploadDir, siteId = 'default', t
     await page.setViewport({ width: 1122, height: 794 })
     await page.setContent(html, { waitUntil: 'networkidle2', timeout: 60_000 })
     await page.evaluate(() => document.fonts.ready)
+    // 폰트 로딩 완료 후 본문이 footer를 넘치지 않도록 페이지별 자동 축소 적용
+    await page.evaluate(() => { if (window.__fitPages) window.__fitPages() })
 
     const pdfBuf = await page.pdf({
       printBackground: true,
