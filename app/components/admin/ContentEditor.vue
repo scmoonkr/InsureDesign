@@ -525,15 +525,11 @@ function buildImageBlock(type: string, imageIds: string[]): string {
 
 // ── Runtime config + API base ────────────────────────────────────────────────
 
-const { activeSiteId } = useSiteAdmin()
 const apiBase = useApiBase()
 
 // /api/admin/contents vs /api/me/contents (Stage 2 endpoint)
 const apiContentsBase = computed(() =>
   mode.value === 'author' ? `${apiBase}/api/me/contents` : `${apiBase}/api/admin/contents`,
-)
-const siteQuery = computed(() =>
-  mode.value === 'admin' ? `?siteId=${encodeURIComponent(activeSiteId.value || '')}` : '',
 )
 
 // ── State ────────────────────────────────────────────────────────────────────
@@ -586,14 +582,12 @@ const form = reactive({
 const categoryRows = ref<CategoryRow[]>([])
 
 watch(
-  [() => isAdmin.value, activeSiteId],
-  async ([shouldFetch, siteId]) => {
+  () => isAdmin.value,
+  async (shouldFetch) => {
     if (!shouldFetch) { categoryRows.value = []; return }
-    // Even when activeSiteId is empty (single-site setups where the sites
-    // collection isn't populated), the server falls back to DEFAULT_SITE_ID.
     try {
       const r = await $fetch<{ items: Category[] }>(
-        `${apiBase}/api/admin/categories?siteId=${encodeURIComponent(siteId || '')}`,
+        `${apiBase}/api/admin/categories`,
         { credentials: 'include' },
       )
       const all = r.items ?? []
@@ -625,12 +619,12 @@ watch(
 const existingTagList = ref<Tag[]>([])
 
 watch(
-  [() => isAdmin.value && isPost.value, activeSiteId],
-  async ([shouldFetch, siteId]) => {
+  () => isAdmin.value && isPost.value,
+  async (shouldFetch) => {
     if (!shouldFetch) { existingTagList.value = []; return }
     try {
       const r = await $fetch<{ items: Tag[] }>(
-        `${apiBase}/api/admin/tags?siteId=${encodeURIComponent(siteId || '')}`,
+        `${apiBase}/api/admin/tags`,
         { credentials: 'include' },
       )
       existingTagList.value = r.items ?? []
@@ -647,12 +641,12 @@ type ParentListItem = { id: string; title: string }
 const parentOptions = ref<ParentListItem[]>([])
 
 watch(
-  [() => isPage.value && isAdmin.value, activeSiteId],
-  async ([shouldFetch, siteId]) => {
+  () => isPage.value && isAdmin.value,
+  async (shouldFetch) => {
     if (!shouldFetch) { parentOptions.value = []; return }
     try {
       const r = await $fetch<{ items: ParentListItem[] }>(
-        `${apiBase}/api/admin/contents?siteId=${encodeURIComponent(siteId || '')}&type=page&limit=200`,
+        `${apiBase}/api/admin/contents?type=page&limit=200`,
         { credentials: 'include' },
       )
       parentOptions.value = r.items ?? []
@@ -664,8 +658,7 @@ watch(
 )
 
 // ── Media (for featured image URL lookup) — endpoint differs by mode ─────────
-// admin → /api/admin/media (siteId from x-admin-site / activeSiteId)
-// author → /api/me/media   (siteId resolved from request host on the server)
+// admin → /api/admin/media, author → /api/me/media
 
 const mediaListUrl = computed(() =>
   mode.value === 'author' ? `${apiBase}/api/me/media` : `${apiBase}/api/admin/media`,
@@ -677,11 +670,9 @@ const mediaUploadUrl = computed(() =>
 const mediaList = ref<MediaItem[]>([])
 
 watch(
-  [mediaListUrl, activeSiteId],
-  async ([url]) => {
+  mediaListUrl,
+  async (url) => {
     if (!url) { mediaList.value = []; return }
-    // Both endpoints have server-side siteId fallbacks (admin → DEFAULT_SITE_ID,
-    // author → resolvePublicSiteId from x-site-host), so we don't gate on activeSiteId.
     try {
       const r = await $fetch<{ items: MediaItem[] }>(url, { credentials: 'include' })
       mediaList.value = r.items ?? []
@@ -868,7 +859,7 @@ async function openPreview() {
   previewMediaMap.value = {}
   try {
     const result = await $fetch<PreviewResult>(
-      `${apiContentsBase.value}/preview${siteQuery.value}`,
+      `${apiContentsBase.value}/preview`,
       {
         method: 'POST',
         credentials: 'include',
@@ -898,13 +889,9 @@ async function uploadFeaturedFile(file: File) {
   try {
     const formData = new FormData()
     formData.append('files', file)
-    const headers: Record<string, string> = {}
-    if (mode.value === 'admin' && activeSiteId.value) {
-      headers['x-admin-site'] = activeSiteId.value
-    }
     const result = await $fetch<{ items: Array<{ id: string; paths: { original: string } }> }>(
       mediaUploadUrl.value,
-      { method: 'POST', credentials: 'include', headers, body: formData },
+      { method: 'POST', credentials: 'include', body: formData },
     )
     const item = result.items?.[0]
     if (item) {
@@ -963,15 +950,15 @@ async function loadDetail() {
     // Admin + post: fetch detail + tag list in parallel so we can map server-side
     // tagIds to names without racing against the categories/tags watchers.
     // Author mode: /api/me/contents/[id] response includes tagNames directly.
-    const needAdminTags = isPost.value && isAdmin.value && !!activeSiteId.value
+    const needAdminTags = isPost.value && isAdmin.value
     const [detail, tagsRes] = await Promise.all([
       $fetch<{ content: (PostDetail | PageDetail) & { tagNames?: string[] } }>(
-        `${apiContentsBase.value}/${props.id}${siteQuery.value}`,
+        `${apiContentsBase.value}/${props.id}`,
         { credentials: 'include' },
       ),
       needAdminTags
         ? $fetch<{ items: Tag[] }>(
-            `${apiBase}/api/admin/tags?siteId=${encodeURIComponent(activeSiteId.value || '')}`,
+            `${apiBase}/api/admin/tags`,
             { credentials: 'include' },
           )
         : Promise.resolve({ items: [] as Tag[] }),
@@ -1013,9 +1000,7 @@ async function loadDetail() {
   }
 }
 
-// Load detail on mount. Both admin and author API endpoints have server-side
-// siteId fallbacks (DEFAULT_SITE_ID / x-site-host), so we don't need to wait
-// for useSiteAdmin's activeSiteId to populate before fetching.
+// Load detail on mount.
 onMounted(async () => {
   if (!props.id) return
   await loadDetail()
@@ -1069,13 +1054,13 @@ async function save() {
     let result: { content: { id: string; slug: string } }
     if (isNewMode.value) {
       result = await $fetch(
-        `${apiContentsBase.value}${siteQuery.value}`,
+        `${apiContentsBase.value}`,
         { method: 'POST', credentials: 'include', body },
       )
       message.value = isPost.value ? '글이 생성되었습니다.' : '페이지가 생성되었습니다.'
     } else {
       result = await $fetch(
-        `${apiContentsBase.value}/${props.id}${siteQuery.value}`,
+        `${apiContentsBase.value}/${props.id}`,
         { method: 'PUT', credentials: 'include', body },
       )
       form.slug = result.content.slug
@@ -1102,7 +1087,7 @@ async function remove() {
   isDeleting.value = true
   try {
     await $fetch(
-      `${apiContentsBase.value}/${props.id}${siteQuery.value}`,
+      `${apiContentsBase.value}/${props.id}`,
       { method: 'DELETE', credentials: 'include' },
     )
     emit('deleted')

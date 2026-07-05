@@ -88,7 +88,6 @@ if (!dbName) {
 }
 
 const collections = [
-  'sites',
   'users',
   'categories',
   'tags',
@@ -102,88 +101,81 @@ const collections = [
 ]
 
 const indexesByCollection = {
-  sites: [
-    { keys: { siteId: 1 }, options: { unique: true, name: 'uniq_siteId' } },
-    {
-      keys: { 'domains.host': 1 },
-      options: { unique: true, sparse: true, name: 'uniq_domains_host' },
-    },
-  ],
   users: [
     {
       keys: { provider: 1, providerId: 1 },
       options: { unique: true, name: 'uniq_provider_providerId' },
     },
     { keys: { email: 1 }, options: { name: 'idx_email' } },
-    { keys: { 'roles.siteId': 1, 'roles.role': 1 }, options: { name: 'idx_roles_site_role' } },
+    { keys: { 'roles.role': 1 }, options: { name: 'idx_roles_role' } },
   ],
   categories: [
     {
-      keys: { siteId: 1, slug: 1 },
-      options: { unique: true, name: 'uniq_site_slug' },
+      keys: { slug: 1 },
+      options: { unique: true, name: 'uniq_slug' },
     },
     {
-      keys: { siteId: 1, parentId: 1, order: 1 },
-      options: { name: 'idx_site_parent_order' },
+      keys: { parentId: 1, order: 1 },
+      options: { name: 'idx_parent_order' },
     },
   ],
   tags: [
     {
-      keys: { siteId: 1, slug: 1 },
-      options: { unique: true, name: 'uniq_site_slug' },
+      keys: { slug: 1 },
+      options: { unique: true, name: 'uniq_slug' },
     },
-    { keys: { siteId: 1, usageCount: -1 }, options: { name: 'idx_site_usageCount' } },
+    { keys: { usageCount: -1 }, options: { name: 'idx_usageCount' } },
   ],
   media: [
-    { keys: { siteId: 1, createdAt: -1 }, options: { name: 'idx_site_createdAt' } },
-    { keys: { siteId: 1, hash: 1 }, options: { name: 'idx_site_hash' } },
+    { keys: { createdAt: -1 }, options: { name: 'idx_createdAt' } },
+    { keys: { hash: 1 }, options: { name: 'idx_hash' } },
   ],
   contents: [
     {
-      keys: { siteId: 1, slug: 1 },
-      options: { unique: true, name: 'uniq_site_slug' },
+      keys: { slug: 1 },
+      options: { unique: true, name: 'uniq_slug' },
     },
     {
-      keys: { siteId: 1, status: 1, publishedAt: -1 },
-      options: { name: 'idx_site_status_publishedAt' },
+      keys: { status: 1, publishedAt: -1 },
+      options: { name: 'idx_status_publishedAt' },
     },
     {
-      keys: { siteId: 1, contentType: 1, status: 1, publishedAt: -1 },
-      options: { name: 'idx_site_type_status_publishedAt' },
+      keys: { contentType: 1, status: 1, publishedAt: -1 },
+      options: { name: 'idx_type_status_publishedAt' },
     },
     {
-      keys: { siteId: 1, categoryIds: 1, publishedAt: -1 },
-      options: { name: 'idx_site_categories_publishedAt' },
+      keys: { categoryIds: 1, publishedAt: -1 },
+      options: { name: 'idx_categories_publishedAt' },
     },
     {
-      keys: { siteId: 1, tagIds: 1, publishedAt: -1 },
-      options: { name: 'idx_site_tags_publishedAt' },
+      keys: { tagIds: 1, publishedAt: -1 },
+      options: { name: 'idx_tags_publishedAt' },
     },
   ],
   menus: [
     {
-      keys: { siteId: 1, name: 1 },
-      options: { unique: true, name: 'uniq_site_name' },
+      keys: { name: 1 },
+      options: { unique: true, name: 'uniq_name' },
     },
-    { keys: { siteId: 1, location: 1 }, options: { name: 'idx_site_location' } },
+    { keys: { location: 1 }, options: { name: 'idx_location' } },
   ],
   redirects: [
     {
-      keys: { siteId: 1, fromPath: 1 },
-      options: { unique: true, name: 'uniq_site_fromPath' },
+      keys: { fromPath: 1 },
+      options: { unique: true, name: 'uniq_fromPath' },
     },
   ],
   contentRevisions: [
     {
-      keys: { siteId: 1, contentId: 1, revisionNo: -1 },
-      options: { name: 'idx_site_content_revisionNo' },
+      keys: { contentId: 1, revisionNo: -1 },
+      options: { name: 'idx_content_revisionNo' },
     },
   ],
   auditLogs: [
-    { keys: { siteId: 1, createdAt: -1 }, options: { name: 'idx_site_createdAt' } },
+    { keys: { createdAt: -1 }, options: { name: 'idx_createdAt' } },
     {
-      keys: { siteId: 1, resourceType: 1, resourceId: 1 },
-      options: { name: 'idx_site_resource' },
+      keys: { resourceType: 1, resourceId: 1 },
+      options: { name: 'idx_resource' },
     },
   ],
 }

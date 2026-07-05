@@ -16,7 +16,7 @@ const user = await db.collection('users').findOne({ email })
 if (!user) { console.error(`User not found: ${email}`); process.exit(1) }
 
 const roles    = (user.roles || []).filter(r => r.role !== 'super')
-const newRoles = [...roles, { role: 'super', siteId: '*' }]
+const newRoles = [...roles, { role: 'super' }]
 
 await db.collection('users').updateOne({ email }, { $set: { roles: newRoles } })
 

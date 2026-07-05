@@ -145,7 +145,6 @@ definePageMeta({ layout: 'default' })
 
 type Category = {
   id: string
-  siteId: string
   name: string
   slug: string
   parentId: string | null
@@ -156,7 +155,6 @@ type Category = {
 type CategoryRow = Category & { depth: number }
 
 const { navItems } = useBackendMenu()
-const { activeSiteId } = useSiteAdmin()
 const apiBase = useApiBase()
 
 const isSidebarOpen = ref(false)
@@ -176,12 +174,7 @@ const form = reactive({
   order: 0,
 })
 
-const listUrl = computed(() => {
-  const params = new URLSearchParams()
-  if (activeSiteId.value) params.set('siteId', activeSiteId.value)
-  const qs = params.toString()
-  return `${apiBase}/api/admin/categories${qs ? `?${qs}` : ''}`
-})
+const listUrl = `${apiBase}/api/admin/categories`
 
 const { data, pending, refresh } = useFetch<{ items: Category[] }>(
   listUrl,
@@ -189,7 +182,6 @@ const { data, pending, refresh } = useFetch<{ items: Category[] }>(
     key: 'admin-categories',
     credentials: 'include',
     server: false,
-    watch: [activeSiteId],
     default: () => ({ items: [] }),
   },
 )
@@ -297,7 +289,7 @@ async function saveCategory() {
     }
     if (isNewMode.value) {
       const result = await $fetch<{ item: Category }>(
-        `${apiBase}/api/admin/categories?siteId=${encodeURIComponent(activeSiteId.value || '')}`,
+        `${apiBase}/api/admin/categories`,
         { method: 'POST', credentials: 'include', body },
       )
       await refresh()
@@ -307,7 +299,7 @@ async function saveCategory() {
       message.value = '카테고리가 생성되었습니다.'
     } else {
       const result = await $fetch<{ item: Category }>(
-        `${apiBase}/api/admin/categories/${drawerId.value}?siteId=${encodeURIComponent(activeSiteId.value || '')}`,
+        `${apiBase}/api/admin/categories/${drawerId.value}`,
         { method: 'PUT', credentials: 'include', body },
       )
       await refresh()
@@ -332,7 +324,7 @@ async function deleteCategoryItem() {
   isDeleting.value = true
   try {
     await $fetch(
-      `${apiBase}/api/admin/categories/${drawerId.value}?siteId=${encodeURIComponent(activeSiteId.value || '')}`,
+      `${apiBase}/api/admin/categories/${drawerId.value}`,
       { method: 'DELETE', credentials: 'include' },
     )
     await refresh()

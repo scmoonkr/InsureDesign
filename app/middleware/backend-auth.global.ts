@@ -1,4 +1,4 @@
-// Gate /backend/* to users with manager+ role on at least one site.
+// Gate /backend/* to users with manager+ role.
 // Members without manager+ are bounced to / with an alert.
 //
 // Runs on the client only — SSR is allowed to render the page shell so direct
@@ -7,7 +7,7 @@
 const ROLE_LEVELS: Record<string, number> = { member: 1, manager: 2, admin: 3, super: 4 }
 const MIN_BACKEND_LEVEL = ROLE_LEVELS.manager
 
-type Role = { siteId?: string; role: string }
+type Role = { role: string }
 type MeUser = { id: string; roles?: Role[] } | null
 
 function hasBackendAccess(user: MeUser): boolean {

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-이 프로젝트는 Node.js + MongoDB + Vue/Nuxt 기반의 멀티사이트 CMS이다.
+이 프로젝트는 Node.js + MongoDB + Vue/Nuxt 기반의 단일 사이트 CMS이다.
 
 핵심 목표:
 
@@ -10,12 +10,11 @@
 - Minimal Block 확장
 - 선택형 Template UI
 - Style Family 기반 디자인
-- siteId 기반 멀티사이트 구조
+- 단일 사이트 구조 (siteId 없음)
 - WordPress식 자유 편집 금지
 
 ## Core Rules
 
-- 모든 주요 데이터는 siteId 기준으로 분리한다.
 - 관리자 API와 공개 API를 분리한다.
 - Markdown을 본문 원본으로 사용한다.
 - Block은 Markdown 안의 확장 문법으로 처리한다.

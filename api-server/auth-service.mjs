@@ -50,10 +50,10 @@ export async function upsertSocialUser(input) {
     {
       $set: setFields,
       $setOnInsert: {
-        // New OAuth signups get baseline `member` role for the default site so
-        // they can browse logged-in surfaces. Backend access requires manager+
-        // which has to be granted explicitly by an admin.
-        roles: [{ siteId: process.env.DEFAULT_SITE_ID || 'default', role: 'member' }],
+        // New OAuth signups get baseline `member` role so they can browse
+        // logged-in surfaces. Backend access requires manager+ which has to be
+        // granted explicitly by an admin.
+        roles: [{ role: 'member' }],
         createdAt: now,
         isDeleted: false,
         deletedAt: null,

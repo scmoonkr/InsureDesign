@@ -321,7 +321,6 @@ function isHeaderOnly(item: FlatItem): boolean {
 }
 
 const { navItems } = useBackendMenu()
-const { activeSiteId } = useSiteAdmin()
 const apiBase = useApiBase()
 
 const isSidebarOpen = ref(false)
@@ -339,14 +338,11 @@ const form = reactive<{ name: string; location: string; items: FlatItem[] }>({
 
 // ── List menus ───────────────────────────────────────────────────────────────
 
-const menusUrl = computed(
-  () => `${apiBase}/api/admin/menus?siteId=${encodeURIComponent(activeSiteId.value || '')}`,
-)
+const menusUrl = `${apiBase}/api/admin/menus`
 const { data: menusData, refresh: refreshMenus } = useFetch<{ items: Menu[] }>(menusUrl, {
   key: 'admin-menus',
   credentials: 'include',
   server: false,
-  watch: [activeSiteId],
   default: () => ({ items: [] }),
 })
 const menusList = computed<Menu[]>(() => menusData.value?.items ?? [])
@@ -369,19 +365,17 @@ watch(selectedMenuId, (id) => {
 
 // ── Source feeds ─────────────────────────────────────────────────────────────
 
-const sourceParams = computed(() => `siteId=${encodeURIComponent(activeSiteId.value || '')}`)
-
 const { data: pagesData } = useFetch<{ items: ContentRef[] }>(
-  () => `${apiBase}/api/admin/contents?${sourceParams.value}&type=page&limit=50`,
-  { key: 'menus-pages', credentials: 'include', server: false, watch: [activeSiteId], default: () => ({ items: [] }) },
+  `${apiBase}/api/admin/contents?type=page&limit=50`,
+  { key: 'menus-pages', credentials: 'include', server: false, default: () => ({ items: [] }) },
 )
 const { data: postsData } = useFetch<{ items: ContentRef[] }>(
-  () => `${apiBase}/api/admin/contents?${sourceParams.value}&type=post&limit=50`,
-  { key: 'menus-posts', credentials: 'include', server: false, watch: [activeSiteId], default: () => ({ items: [] }) },
+  `${apiBase}/api/admin/contents?type=post&limit=50`,
+  { key: 'menus-posts', credentials: 'include', server: false, default: () => ({ items: [] }) },
 )
 const { data: catsData } = useFetch<{ items: CategoryRef[] }>(
-  () => `${apiBase}/api/admin/categories?${sourceParams.value}`,
-  { key: 'menus-cats', credentials: 'include', server: false, watch: [activeSiteId], default: () => ({ items: [] }) },
+  `${apiBase}/api/admin/categories`,
+  { key: 'menus-cats', credentials: 'include', server: false, default: () => ({ items: [] }) },
 )
 
 const pageSources = computed<ContentRef[]>(() => pagesData.value?.items ?? [])
@@ -577,7 +571,7 @@ async function saveMenu() {
     }
     if (selectedMenuId.value) {
       const result = await $fetch<{ menu: Menu }>(
-        `${apiBase}/api/admin/menus/${selectedMenuId.value}?siteId=${encodeURIComponent(activeSiteId.value || '')}`,
+        `${apiBase}/api/admin/menus/${selectedMenuId.value}`,
         { method: 'PUT', credentials: 'include', body },
       )
       await refreshMenus()
@@ -585,7 +579,7 @@ async function saveMenu() {
       message.value = '메뉴가 저장되었습니다.'
     } else {
       const result = await $fetch<{ menu: Menu }>(
-        `${apiBase}/api/admin/menus?siteId=${encodeURIComponent(activeSiteId.value || '')}`,
+        `${apiBase}/api/admin/menus`,
         { method: 'POST', credentials: 'include', body },
       )
       await refreshMenus()
@@ -608,7 +602,7 @@ async function deleteCurrentMenu() {
   isSaving.value = true
   try {
     await $fetch(
-      `${apiBase}/api/admin/menus/${selectedMenuId.value}?siteId=${encodeURIComponent(activeSiteId.value || '')}`,
+      `${apiBase}/api/admin/menus/${selectedMenuId.value}`,
       { method: 'DELETE', credentials: 'include' },
     )
     await refreshMenus()

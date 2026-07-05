@@ -18,38 +18,37 @@ function serializeTag(doc) {
   return { id: String(_id), ...rest }
 }
 
-async function uniqueSlug(db, siteId, base) {
+async function uniqueSlug(db, base) {
   let candidate = base
   let i = 2
-  while (await db.collection('tags').findOne({ siteId, slug: candidate, isDeleted: { $ne: true } })) {
+  while (await db.collection('tags').findOne({ slug: candidate, isDeleted: { $ne: true } })) {
     if (i > 100) { candidate = `${base}-${Date.now()}`; break }
     candidate = `${base}-${i++}`
   }
   return candidate
 }
 
-export async function getTagBySlug(siteId, slug) {
+export async function getTagBySlug(slug) {
   const db = await getMongoDb()
   const doc = await db.collection('tags').findOne({
-    siteId,
     slug,
     isDeleted: { $ne: true },
   })
   return serializeTag(doc)
 }
 
-export async function listTags(siteId) {
+export async function listTags() {
   const db = await getMongoDb()
   const items = await db.collection('tags')
-    .find({ siteId, isDeleted: { $ne: true } })
+    .find({ isDeleted: { $ne: true } })
     .sort({ usageCount: -1, name: 1 })
     .toArray()
   return items.map(serializeTag)
 }
 
 // Resolve a list of tag _id values to { id, name, slug } records.
-// Returns only tags that exist + belong to siteId + are not deleted.
-export async function getTagsByIds(siteId, ids) {
+// Returns only tags that exist + are not deleted.
+export async function getTagsByIds(ids) {
   if (!Array.isArray(ids) || !ids.length) return []
   const db = await getMongoDb()
   const objectIds = ids
@@ -57,12 +56,12 @@ export async function getTagsByIds(siteId, ids) {
     .filter(Boolean)
   if (!objectIds.length) return []
   const docs = await db.collection('tags')
-    .find({ siteId, _id: { $in: objectIds }, isDeleted: { $ne: true } })
+    .find({ _id: { $in: objectIds }, isDeleted: { $ne: true } })
     .toArray()
   return docs.map(serializeTag)
 }
 
-export async function findOrCreateTagsByNames(siteId, names, userId) {
+export async function findOrCreateTagsByNames(names, userId) {
   if (!Array.isArray(names) || !names.length) return []
   const db = await getMongoDb()
   const cleanNames = [...new Set(
@@ -74,13 +73,13 @@ export async function findOrCreateTagsByNames(siteId, names, userId) {
   const now = new Date()
   for (const name of cleanNames) {
     const existing = await db.collection('tags').findOne({
-      siteId, name, isDeleted: { $ne: true },
+      name, isDeleted: { $ne: true },
     })
     if (existing) { ids.push(existing._id); continue }
 
-    const slug = await uniqueSlug(db, siteId, nameToSlug(name))
+    const slug = await uniqueSlug(db, nameToSlug(name))
     const doc = {
-      siteId, name, slug, usageCount: 0,
+      name, slug, usageCount: 0,
       createdAt: now, updatedAt: now,
       createdBy: userId || null, updatedBy: userId || null,
       isDeleted: false, deletedAt: null, deletedBy: null,

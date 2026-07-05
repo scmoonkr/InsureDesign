@@ -6,7 +6,7 @@ const ROLE_LEVELS: Record<string, number> = {
   super:   4,
 }
 
-type Role    = { siteId?: string; role: string }
+type Role    = { role: string }
 type MeUser  = { id: string; name?: string; roles?: Role[] } | null
 
 export function useBlockAuth() {

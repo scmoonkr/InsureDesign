@@ -4,7 +4,6 @@
 //
 // Usage:
 //   node scripts/seed-sample-page.mjs
-//   node scripts/seed-sample-page.mjs --site insure
 //   node scripts/seed-sample-page.mjs --replace
 //   node scripts/seed-sample-page.mjs --slug about    # custom slug
 
@@ -22,23 +21,20 @@ function arg(name, defaultValue) {
   return v
 }
 
-const siteId = arg('site', process.env.DEFAULT_SITE_ID || 'default')
 const replace = arg('replace', false)
 const customSlug = arg('slug', '')
 const SOURCE_SLUG = 'sample-all-blocks'
 const DEFAULT_TARGET_SLUG = 'sample-all-blocks-page'
 
 async function run() {
-  console.log(`siteId: ${siteId}`)
-
   const db = await getMongoDb()
 
   // 1. Load the source post
   const source = await db.collection('contents').findOne({
-    siteId, slug: SOURCE_SLUG, contentType: 'post', isDeleted: { $ne: true },
+    slug: SOURCE_SLUG, contentType: 'post', isDeleted: { $ne: true },
   })
   if (!source) {
-    console.error(`× source post "${SOURCE_SLUG}" not found in siteId=${siteId}.`)
+    console.error(`× source post "${SOURCE_SLUG}" not found.`)
     console.error(`  Run: npm run seed:sample-post`)
     process.exit(1)
   }
@@ -48,11 +44,11 @@ async function run() {
 
   // 2. Remove existing target if --replace
   const existing = await db.collection('contents').findOne({
-    siteId, slug: targetSlug, contentType: 'page', isDeleted: { $ne: true },
+    slug: targetSlug, contentType: 'page', isDeleted: { $ne: true },
   })
   if (existing && replace) {
     console.log(`- replacing existing sample page ${existing._id}`)
-    await deleteContent(String(existing._id), siteId, null)
+    await deleteContent(String(existing._id), null)
   } else if (existing) {
     console.log(`! sample page already exists with slug "${targetSlug}" (id=${existing._id}).`)
     console.log(`  Re-run with --replace to overwrite. Aborting.`)
@@ -61,7 +57,6 @@ async function run() {
 
   // 3. Create the page — same markdown / featured image / summary, page-specific meta
   const page = await createContent({
-    siteId,
     contentType: 'page',
     title: '모든 블록을 사용한 샘플 페이지',
     slug: targetSlug,

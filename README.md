@@ -1,6 +1,6 @@
-﻿# CMS
+﻿# InsureDesign
 
-Node.js + MongoDB + Nuxt 기반 멀티사이트 CMS입니다.
+Node.js + MongoDB + Nuxt 기반 단일 사이트 InsureDesign입니다.
 
 ## 실행 환경
 
@@ -73,20 +73,33 @@ npm run db:init
 npm run db:verify
 ```
 
+### 멀티사이트 → 단일 사이트 마이그레이션 (1회성)
+
+이 InsureDesign는 단일 사이트 구조로, 데이터에 `siteId` 개념이 없습니다. 과거 멀티사이트
+버전에서 넘어온 DB라면 아래를 한 번 실행해 `settings` 문서를 단일 셀렉터로 이관하고,
+`sites` 컬렉션 제거·`siteId` 필드 정리·인덱스 재생성을 수행합니다.
+
+```bash
+npm run db:migrate-single-site
+npm run db:init
+```
+
+> 새로 만든 단일 사이트 DB에서도 안전하게 실행할 수 있습니다.
+
 ## 6) Git 설정
 
 ### 신규 로컬 환경에서 클론
 
 ```bash
-git clone https://github.com/scmoonkr/CMS.git
-cd CMS
+git clone https://github.com/scmoonkr/InsureDesign.git
+cd InsureDesign
 ```
 
 ### 기존 프로젝트를 원격에 처음 연결할 때
 
 ```bash
 git init
-git remote add origin https://github.com/scmoonkr/CMS.git
+git remote add origin https://github.com/scmoonkr/InsureDesign.git
 git branch -M main
 git add .
 git commit -m "first commit"
@@ -100,7 +113,7 @@ git push -u origin main
 git remote -v
 
 # 원격 URL 변경
-git remote set-url origin https://github.com/scmoonkr/CMS.git
+git remote set-url origin https://github.com/scmoonkr/InsureDesign.git
 ```
 
 ### 원격 변경사항 가져오기

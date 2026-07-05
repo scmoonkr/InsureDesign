@@ -1,5 +1,4 @@
 export type SiteConfig = {
-  siteId:     string
   theme:      string
   siteName:   string
   logoUrl:    string
@@ -7,7 +6,7 @@ export type SiteConfig = {
 }
 
 const DEFAULT: SiteConfig = {
-  siteId: 'default', theme: 'default', siteName: '', logoUrl: '', faviconUrl: '',
+  theme: 'default', siteName: '', logoUrl: '', faviconUrl: '',
 }
 
 export function useSiteConfig() {

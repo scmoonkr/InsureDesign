@@ -146,7 +146,7 @@ function checkProps(node, spec) {
       }
     }
     if (def.type === 'imageId') {
-      // imageId existence in siteId is checked separately by validateAndEnrichImages.
+      // imageId existence is checked separately by validateAndEnrichImages.
       if (typeof v !== 'string' || !v.trim()) {
         return `옵션 '${key}'은 유효한 imageId여야 합니다.`
       }

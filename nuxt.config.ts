@@ -64,7 +64,7 @@ export default defineNuxtConfig({
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         {
           name: 'description',
-          content: 'Markdown, Template, StyleFamily 기반 멀티사이트 CMS',
+          content: 'Markdown, Template, StyleFamily 기반 단일 사이트 CMS',
         },
       ],
     },

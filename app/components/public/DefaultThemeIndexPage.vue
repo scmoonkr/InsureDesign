@@ -30,7 +30,7 @@
       <main class="theme-content">
         <div class="theme-results-head">
           <h2 class="theme-block-title">Men Breast <span class="theme-em">50m LCM</span></h2>
-          <span class="theme-meta">Published · Public · siteId scoped</span>
+          <span class="theme-meta">Published · Public</span>
         </div>
 
         <DefaultThemeTable :columns="columns" :rows="rows" />
@@ -78,7 +78,7 @@ const footerColumns = [
   },
   {
     title: 'Principles',
-    body: 'The CMS favors stability, verification, and siteId-scoped data over free-form page building.',
+    body: 'The CMS favors stability, verification, and structured data over free-form page building.',
   },
 ]
 </script>

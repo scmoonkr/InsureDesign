@@ -6,10 +6,8 @@ export default defineNuxtPlugin(async () => {
     try {
       const internal = (config.apiInternalBase as string | undefined || '').replace(/\/$/, '')
       const apiBase = internal || `http://localhost:${config.apiPort || 9000}`
-      const { host } = useRequestHeaders(['host'])
-      const data = await $fetch<{ theme: string; siteId: string }>(
+      const data = await $fetch<{ theme: string }>(
         `${apiBase}/api/public/site-config`,
-        { headers: host ? { 'x-site-host': host } : {} },
       )
       if (data?.theme) themeName.value = data.theme
     } catch {

@@ -18,7 +18,7 @@
 <script setup lang="ts">
 const adminItems = [
   { label: 'Contents', path: '/admin/contents', description: 'Markdown 기반 콘텐츠 관리' },
-  { label: 'Images', path: '/admin/images', description: 'siteId 기준 이미지 관리' },
+  { label: 'Images', path: '/admin/images', description: '이미지 관리' },
   { label: 'Menus', path: '/admin/menus', description: 'header/footer 메뉴 관리' },
   { label: 'Settings', path: '/admin/settings', description: '사이트 정책 및 설정 관리' },
 ]

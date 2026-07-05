@@ -41,20 +41,20 @@ function sanitizeItems(items, depth = 0) {
   return out
 }
 
-export async function listMenus(siteId) {
+export async function listMenus() {
   const db = await getMongoDb()
   const items = await db.collection('menus')
-    .find({ siteId, isDeleted: { $ne: true } })
+    .find({ isDeleted: { $ne: true } })
     .sort({ location: 1, name: 1 })
     .toArray()
   return items.map(serializeMenu)
 }
 
-export async function getMenuById(siteId, id) {
+export async function getMenuById(id) {
   if (!ObjectId.isValid(id)) return null
   const db = await getMongoDb()
   const doc = await db.collection('menus').findOne({
-    _id: new ObjectId(id), siteId, isDeleted: { $ne: true },
+    _id: new ObjectId(id), isDeleted: { $ne: true },
   })
   return serializeMenu(doc)
 }
@@ -63,7 +63,6 @@ export async function createMenu(data, userId) {
   const db = await getMongoDb()
   const now = new Date()
   const doc = {
-    siteId: data.siteId,
     name: String(data.name || 'Untitled Menu').trim().slice(0, 100),
     location: ALLOWED_LOCATIONS.includes(data.location) ? data.location : 'custom',
     items: sanitizeItems(data.items),
@@ -79,7 +78,7 @@ export async function createMenu(data, userId) {
   return serializeMenu({ ...doc, _id: result.insertedId })
 }
 
-export async function updateMenu(id, siteId, fields, userId) {
+export async function updateMenu(id, fields, userId) {
   if (!ObjectId.isValid(id)) return null
   const db = await getMongoDb()
   const now = new Date()
@@ -90,19 +89,19 @@ export async function updateMenu(id, siteId, fields, userId) {
   if (Array.isArray(fields.items)) update.items = sanitizeItems(fields.items)
 
   const result = await db.collection('menus').findOneAndUpdate(
-    { _id: new ObjectId(id), siteId, isDeleted: { $ne: true } },
+    { _id: new ObjectId(id), isDeleted: { $ne: true } },
     { $set: update },
     { returnDocument: 'after' },
   )
   return serializeMenu(result)
 }
 
-export async function deleteMenu(id, siteId, userId) {
+export async function deleteMenu(id, userId) {
   if (!ObjectId.isValid(id)) return false
   const db = await getMongoDb()
   const now = new Date()
   const result = await db.collection('menus').updateOne(
-    { _id: new ObjectId(id), siteId, isDeleted: { $ne: true } },
+    { _id: new ObjectId(id), isDeleted: { $ne: true } },
     { $set: { isDeleted: true, deletedAt: now, deletedBy: userId || null, updatedAt: now } },
   )
   return result.modifiedCount > 0

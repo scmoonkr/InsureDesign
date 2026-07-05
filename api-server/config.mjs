@@ -58,7 +58,6 @@ export function getConfig() {
     kakaoClientSecret: process.env.KAKAO_CLIENT_SECRET,
     kakaoCallbackUrl: process.env.KAKAO_CALLBACK_URL,
     uploadDir: path.resolve(process.env.UPLOAD_DIR || 'uploads'),
-    defaultSiteId: process.env.DEFAULT_SITE_ID || 'default',
     allowedOrigins: (process.env.ALLOWED_ORIGINS || process.env.SITE_URL || 'http://localhost:9001')
       .split(',')
       .map(o => o.trim().replace(/\/$/, ''))

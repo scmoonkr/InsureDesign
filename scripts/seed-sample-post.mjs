@@ -1,10 +1,9 @@
 // Seed a sample post that exercises every supported block type.
-// Picks real image IDs from the target siteId's media collection so the
+// Picks real image IDs from the media collection so the
 // gallery / imageGrid / slide / featured-image checks pass.
 //
 // Usage:
 //   node scripts/seed-sample-post.mjs
-//   node scripts/seed-sample-post.mjs --site insure
 //   node scripts/seed-sample-post.mjs --replace          (deletes existing sample first)
 
 import { loadEnv } from '../api-server/config.mjs'
@@ -22,30 +21,28 @@ function arg(name, defaultValue) {
   return v
 }
 
-const siteId = arg('site', process.env.DEFAULT_SITE_ID || 'default')
 const replace = arg('replace', false)
 const authorEmail = arg('author', 'library4@naver.com')
 const SAMPLE_SLUG = 'sample-all-blocks'
 
-async function pickImages(siteId, n) {
+async function pickImages(n) {
   const db = await getMongoDb()
   const items = await db.collection('media')
-    .find({ siteId, isDeleted: { $ne: true }, mimeType: /^image\// })
+    .find({ isDeleted: { $ne: true }, mimeType: /^image\// })
     .sort({ createdAt: 1 })
     .limit(n)
     .toArray()
   return items.map(it => String(it._id))
 }
 
-async function ensureCategory(siteId) {
+async function ensureCategory() {
   const db = await getMongoDb()
   let cat = await db.collection('categories').findOne({
-    siteId, slug: 'sample', isDeleted: { $ne: true },
+    slug: 'sample', isDeleted: { $ne: true },
   })
   if (cat) return String(cat._id)
   const now = new Date()
   const result = await db.collection('categories').insertOne({
-    siteId,
     name: 'Sample',
     slug: 'sample',
     parentId: null,
@@ -131,24 +128,15 @@ function buildMarkdown(imageIds) {
 }
 
 async function run() {
-  console.log(`siteId: ${siteId}`)
-
   const db = await getMongoDb()
-
-  // Soft check — sites collection may be empty in early dev; public route uses
-  // DEFAULT_SITE_ID fallback so the post is still reachable.
-  const site = await db.collection('sites').findOne({ siteId })
-  if (!site) {
-    console.warn(`! sites collection has no entry for siteId="${siteId}" — relying on DEFAULT_SITE_ID fallback.`)
-  }
 
   // Replace existing sample if requested
   const existing = await db.collection('contents').findOne({
-    siteId, slug: SAMPLE_SLUG, isDeleted: { $ne: true },
+    slug: SAMPLE_SLUG, isDeleted: { $ne: true },
   })
   if (existing && replace) {
     console.log(`- replacing existing sample post ${existing._id}`)
-    await deleteContent(String(existing._id), siteId, null)
+    await deleteContent(String(existing._id), null)
   } else if (existing) {
     console.log(`! sample post already exists with slug "${SAMPLE_SLUG}" (id=${existing._id}).`)
     console.log(`  Re-run with --replace to overwrite. Aborting.`)
@@ -156,16 +144,16 @@ async function run() {
   }
 
   // Collect resources
-  const imageIds = await pickImages(siteId, 6)
+  const imageIds = await pickImages(6)
   console.log(`- found ${imageIds.length} image(s) in media collection`)
   if (imageIds.length === 0) {
     console.log(`  Image-based blocks (gallery/imageGrid/slide) will be skipped.`)
   }
 
-  const categoryId = await ensureCategory(siteId)
+  const categoryId = await ensureCategory()
   console.log(`- using category "Sample" (${categoryId})`)
 
-  const tagIds = await findOrCreateTagsByNames(siteId, ['sample', 'all-blocks', 'demo'], null)
+  const tagIds = await findOrCreateTagsByNames(['sample', 'all-blocks', 'demo'], null)
   console.log(`- using ${tagIds.length} tag(s)`)
 
   // Resolve author by email
@@ -184,7 +172,6 @@ async function run() {
   const featured = imageIds[0] || null
 
   const post = await createContent({
-    siteId,
     contentType: 'post',
     title: '모든 블록을 사용한 샘플 글',
     slug: SAMPLE_SLUG,

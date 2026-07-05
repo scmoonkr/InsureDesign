@@ -12,9 +12,9 @@ export function nameToSlug(name) {
     .slice(0, 80) || 'category'
 }
 
-async function generateUniqueSlug(db, siteId, base, excludeId = null) {
+async function generateUniqueSlug(db, base, excludeId = null) {
   const buildQuery = (slug) => {
-    const q = { siteId, slug, isDeleted: { $ne: true } }
+    const q = { slug, isDeleted: { $ne: true } }
     if (excludeId && ObjectId.isValid(excludeId)) q._id = { $ne: new ObjectId(excludeId) }
     return q
   }
@@ -39,42 +39,39 @@ function serializeCategory(doc) {
   }
 }
 
-export async function listCategories(siteId) {
+export async function listCategories() {
   const db = await getMongoDb()
   const items = await db.collection('categories')
-    .find({ siteId, isDeleted: { $ne: true } })
+    .find({ isDeleted: { $ne: true } })
     .sort({ order: 1, name: 1 })
     .toArray()
   return items.map(serializeCategory)
 }
 
-export async function getCategoryById(siteId, id) {
+export async function getCategoryById(id) {
   if (!ObjectId.isValid(id)) return null
   const db = await getMongoDb()
   const doc = await db.collection('categories').findOne({
     _id: new ObjectId(id),
-    siteId,
     isDeleted: { $ne: true },
   })
   return serializeCategory(doc)
 }
 
-export async function getCategoryBySlug(siteId, slug) {
+export async function getCategoryBySlug(slug) {
   const db = await getMongoDb()
   const doc = await db.collection('categories').findOne({
-    siteId,
     slug,
     isDeleted: { $ne: true },
   })
   return serializeCategory(doc)
 }
 
-async function resolveParent(db, siteId, parentIdInput) {
+async function resolveParent(db, parentIdInput) {
   if (!parentIdInput) return null
   if (!ObjectId.isValid(parentIdInput)) throw new Error('Invalid parent category id')
   const parent = await db.collection('categories').findOne({
     _id: new ObjectId(parentIdInput),
-    siteId,
     isDeleted: { $ne: true },
   })
   if (!parent) throw new Error('Parent category not found')
@@ -86,11 +83,10 @@ export async function createCategory(data, userId) {
   const now = new Date()
   const name = String(data.name || '').trim()
   const slugBase = data.slug ? String(data.slug).trim() : nameToSlug(name)
-  const slug = await generateUniqueSlug(db, data.siteId, slugBase)
-  const parentId = await resolveParent(db, data.siteId, data.parentId)
+  const slug = await generateUniqueSlug(db, slugBase)
+  const parentId = await resolveParent(db, data.parentId)
 
   const doc = {
-    siteId: data.siteId,
     name,
     slug,
     parentId,
@@ -108,12 +104,11 @@ export async function createCategory(data, userId) {
   return serializeCategory({ ...doc, _id: result.insertedId })
 }
 
-export async function updateCategory(id, siteId, fields, userId) {
+export async function updateCategory(id, fields, userId) {
   if (!ObjectId.isValid(id)) return null
   const db = await getMongoDb()
   const existing = await db.collection('categories').findOne({
     _id: new ObjectId(id),
-    siteId,
     isDeleted: { $ne: true },
   })
   if (!existing) return null
@@ -126,9 +121,9 @@ export async function updateCategory(id, siteId, fields, userId) {
 
   const slugInput = typeof fields.slug === 'string' ? fields.slug.trim() : ''
   if (slugInput && slugInput !== existing.slug) {
-    update.slug = await generateUniqueSlug(db, siteId, slugInput, id)
+    update.slug = await generateUniqueSlug(db, slugInput, id)
   } else if (!slugInput && fields.name && fields.name.trim() !== existing.name) {
-    update.slug = await generateUniqueSlug(db, siteId, nameToSlug(fields.name), id)
+    update.slug = await generateUniqueSlug(db, nameToSlug(fields.name), id)
   }
 
   if (Object.hasOwn(fields, 'parentId')) {
@@ -137,13 +132,13 @@ export async function updateCategory(id, siteId, fields, userId) {
     } else {
       if (String(fields.parentId) === id) throw new Error('Category cannot be its own parent')
       let cursor = await db.collection('categories').findOne({
-        _id: new ObjectId(fields.parentId), siteId, isDeleted: { $ne: true },
+        _id: new ObjectId(fields.parentId), isDeleted: { $ne: true },
       })
       while (cursor) {
         if (String(cursor._id) === id) throw new Error('Cycle detected in category parent chain')
         if (!cursor.parentId) break
         cursor = await db.collection('categories').findOne({
-          _id: cursor.parentId, siteId, isDeleted: { $ne: true },
+          _id: cursor.parentId, isDeleted: { $ne: true },
         })
       }
       update.parentId = new ObjectId(fields.parentId)
@@ -151,14 +146,14 @@ export async function updateCategory(id, siteId, fields, userId) {
   }
 
   const result = await db.collection('categories').findOneAndUpdate(
-    { _id: new ObjectId(id), siteId, isDeleted: { $ne: true } },
+    { _id: new ObjectId(id), isDeleted: { $ne: true } },
     { $set: update },
     { returnDocument: 'after' },
   )
   return serializeCategory(result)
 }
 
-export async function getCategoriesByIds(siteId, ids) {
+export async function getCategoriesByIds(ids) {
   if (!Array.isArray(ids) || !ids.length) return []
   const db = await getMongoDb()
   const objectIds = ids
@@ -166,25 +161,23 @@ export async function getCategoriesByIds(siteId, ids) {
     .filter(Boolean)
   if (!objectIds.length) return []
   const docs = await db.collection('categories')
-    .find({ _id: { $in: objectIds }, siteId, isDeleted: { $ne: true } })
+    .find({ _id: { $in: objectIds }, isDeleted: { $ne: true } })
     .project({ name: 1, slug: 1 })
     .toArray()
   return docs.map(d => ({ id: String(d._id), name: d.name, slug: d.slug }))
 }
 
-export async function deleteCategory(id, siteId, userId) {
+export async function deleteCategory(id, userId) {
   if (!ObjectId.isValid(id)) return { ok: false, reason: 'invalid' }
   const db = await getMongoDb()
 
   const childCount = await db.collection('categories').countDocuments({
     parentId: new ObjectId(id),
-    siteId,
     isDeleted: { $ne: true },
   })
   if (childCount > 0) return { ok: false, reason: 'has-children' }
 
   const refCount = await db.collection('contents').countDocuments({
-    siteId,
     categoryIds: new ObjectId(id),
     isDeleted: { $ne: true },
   })
@@ -192,7 +185,7 @@ export async function deleteCategory(id, siteId, userId) {
 
   const now = new Date()
   const result = await db.collection('categories').updateOne(
-    { _id: new ObjectId(id), siteId, isDeleted: { $ne: true } },
+    { _id: new ObjectId(id), isDeleted: { $ne: true } },
     { $set: { isDeleted: true, deletedAt: now, deletedBy: userId || null, updatedAt: now } },
   )
   return { ok: result.modifiedCount > 0 }

@@ -87,7 +87,6 @@ type PageListItem = {
 const LIMIT = 20
 
 const { navItems } = useBackendMenu()
-const { activeSiteId } = useSiteAdmin()
 const apiBase = useApiBase()
 
 const isSidebarOpen = ref(false)
@@ -96,7 +95,6 @@ const skip = ref(0)
 
 const listUrl = computed(() => {
   const p = new URLSearchParams()
-  p.set('siteId', activeSiteId.value || '')
   p.set('type', 'page')
   p.set('limit', String(LIMIT))
   p.set('skip', String(skip.value))
@@ -110,7 +108,7 @@ const { data, pending } = useFetch<{ items: PageListItem[]; total: number }>(
     key: 'admin-pages-list',
     credentials: 'include',
     server: false,
-    watch: [statusFilter, activeSiteId, skip],
+    watch: [statusFilter, skip],
     default: () => ({ items: [], total: 0 }),
   },
 )
@@ -118,7 +116,7 @@ const { data, pending } = useFetch<{ items: PageListItem[]; total: number }>(
 const items = computed<PageListItem[]>(() => data.value?.items ?? [])
 const total = computed(() => data.value?.total ?? 0)
 
-watch([statusFilter, activeSiteId], () => { skip.value = 0 })
+watch([statusFilter], () => { skip.value = 0 })
 
 function formatDate(d: string) {
   if (!d) return '-'

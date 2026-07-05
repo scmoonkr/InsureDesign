@@ -60,11 +60,10 @@ loadEnv(path.resolve(process.cwd(), '.env'))
 
 const dbName = process.env.MONGODB_DB_NAME?.trim() || process.env.MONGO_DBNAME?.trim()
 const expectedCollections = [
-  'sites',
   'users',
   'categories',
   'tags',
-  'images',
+  'media',
   'contents',
   'menus',
   'settings',

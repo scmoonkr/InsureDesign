@@ -403,7 +403,7 @@ function sanitizeFilename(name) {
     .slice(0, 100) || 'proposal'
 }
 
-export async function generatePdf(proposalData, uploadDir, siteId = 'default', title = 'proposal') {
+export async function generatePdf(proposalData, uploadDir, title = 'proposal') {
   let puppeteer
   try {
     const mod = await import('puppeteer')
@@ -449,8 +449,8 @@ export async function generatePdf(proposalData, uploadDir, siteId = 'default', t
     const now  = new Date()
     const yyyy = now.getFullYear().toString()
     const mm   = String(now.getMonth() + 1).padStart(2, '0')
-    const dir  = path.resolve(uploadDir, 'sites', siteId, yyyy, mm, 'pdf')
-    const urlPath = `/uploads/sites/${siteId}/${yyyy}/${mm}/pdf/${filename}?t=${Date.now()}`
+    const dir  = path.resolve(uploadDir, yyyy, mm, 'pdf')
+    const urlPath = `/uploads/${yyyy}/${mm}/pdf/${filename}?t=${Date.now()}`
 
     await mkdir(dir, { recursive: true })
     await writeFile(path.join(dir, filename), pdfBuf)

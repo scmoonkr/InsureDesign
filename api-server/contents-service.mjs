@@ -83,17 +83,17 @@ function walkWithLabels(nodes, fn, prefix = '') {
   }
 }
 
-// Verify every referenced imageId resolves to a media doc in the same siteId.
+// Verify every referenced imageId resolves to a media doc.
 // Returns error array. Also annotates blocks with `_media` lookup map for the renderer.
-async function validateAndEnrichImages(nodes, siteId) {
+async function validateAndEnrichImages(nodes) {
   const referenced = collectImageIds(nodes)
   if (!referenced.length) return []
-  const mediaMap = await getMediaByIds(siteId, referenced)
+  const mediaMap = await getMediaByIds(referenced)
   const errors = []
   walkWithLabels(nodes, (n, label) => {
     const missing = missingImageIdsForNode(n, mediaMap)
     if (missing.length) {
-      errors.push(`${label} (${n.type}): siteId의 미디어에서 찾을 수 없는 imageId — ${missing.join(', ')}`)
+      errors.push(`${label} (${n.type}): 미디어에서 찾을 수 없는 imageId — ${missing.join(', ')}`)
     }
     // Annotate leaf blocks so the renderer can resolve image URLs.
     if (n.type !== 'row') n.props._media = mediaMap
@@ -118,19 +118,19 @@ function stripMedia(nodes) {
 
 // Dry-run for the editor preview. Returns parsed blocks + mediaMap and any
 // validation errors WITHOUT throwing — letting the UI show the user what's wrong.
-export async function previewMarkdown(markdown, siteId, { allowedBlocks } = {}) {
+export async function previewMarkdown(markdown, { allowedBlocks } = {}) {
   const parsed = parseMarkdownBlocks(markdown || '')
   const schemaErrors = validateParsedBlocks(parsed, { allowedBlocks })
   const withDefaults = applyBlockDefaults(parsed)
   const ids = collectImageIds(withDefaults)
-  const mediaMap = (siteId && ids.length) ? await getMediaByIds(siteId, ids) : {}
+  const mediaMap = ids.length ? await getMediaByIds(ids) : {}
 
-  // Image siteId mismatch detection (analogous to validateAndEnrichImages)
+  // Missing-image detection (analogous to validateAndEnrichImages)
   const imgErrors = []
   walkWithLabels(withDefaults, (n, label) => {
     const missing = missingImageIdsForNode(n, mediaMap)
     if (missing.length) {
-      imgErrors.push(`${label} (${n.type}): siteId의 미디어에서 찾을 수 없는 imageId — ${missing.join(', ')}`)
+      imgErrors.push(`${label} (${n.type}): 미디어에서 찾을 수 없는 imageId — ${missing.join(', ')}`)
     }
   })
 
@@ -145,7 +145,7 @@ export async function previewMarkdown(markdown, siteId, { allowedBlocks } = {}) 
 
 // Parse + validate + render markdown into the four cache fields.
 // Throws Error('Block validation: ...') on invalid block usage.
-async function compileMarkdown(markdown, { siteId, allowedBlocks } = {}) {
+async function compileMarkdown(markdown, { allowedBlocks } = {}) {
   const parsed = parseMarkdownBlocks(markdown || '')
   const errors = validateParsedBlocks(parsed, { allowedBlocks })
   if (errors.length) {
@@ -155,14 +155,12 @@ async function compileMarkdown(markdown, { siteId, allowedBlocks } = {}) {
   }
   const withDefaults = applyBlockDefaults(parsed)
 
-  // Image ref check + URL map (only meaningful when siteId is known)
-  if (siteId) {
-    const imgErrors = await validateAndEnrichImages(withDefaults, siteId)
-    if (imgErrors.length) {
-      const err = new Error(`Block validation: ${imgErrors.join(' | ')}`)
-      err.blockErrors = imgErrors
-      throw err
-    }
+  // Image ref check + URL map
+  const imgErrors = await validateAndEnrichImages(withDefaults)
+  if (imgErrors.length) {
+    const err = new Error(`Block validation: ${imgErrors.join(' | ')}`)
+    err.blockErrors = imgErrors
+    throw err
   }
 
   const html = renderBlocksToHtml(withDefaults)
@@ -186,9 +184,9 @@ export function titleToSlug(title) {
     .slice(0, 80) || 'untitled'
 }
 
-async function generateUniqueSlug(db, siteId, base, excludeId = null) {
+async function generateUniqueSlug(db, base, excludeId = null) {
   const buildQuery = (slug) => {
-    const q = { siteId, slug, isDeleted: { $ne: true } }
+    const q = { slug, isDeleted: { $ne: true } }
     if (excludeId && ObjectId.isValid(excludeId)) q._id = { $ne: new ObjectId(excludeId) }
     return q
   }
@@ -213,14 +211,14 @@ function serializeContent(doc) {
 
 // ── Admin CRUD ────────────────────────────────────────────────────────────────
 
-export async function listContents(siteId, {
+export async function listContents({
   contentType = null,
   status = null,
   limit = 50,
   skip = 0,
 } = {}) {
   const db = await getMongoDb()
-  const filter = { siteId, isDeleted: { $ne: true } }
+  const filter = { isDeleted: { $ne: true } }
   if (contentType) filter.contentType = contentType
   if (status) {
     filter.status = status
@@ -243,12 +241,11 @@ export async function listContents(siteId, {
   return { items: items.map(serializeContent), total }
 }
 
-export async function getContentById(siteId, id) {
+export async function getContentById(id) {
   if (!ObjectId.isValid(id)) return null
   const db = await getMongoDb()
   const doc = await db.collection('contents').findOne({
     _id: new ObjectId(id),
-    siteId,
     isDeleted: { $ne: true },
   })
   return serializeContent(doc)
@@ -274,12 +271,11 @@ export async function createContent(data, authorId) {
   const now = new Date()
 
   const slugBase = data.slug ? data.slug.trim() : titleToSlug(data.title)
-  const slug = await generateUniqueSlug(db, data.siteId, slugBase)
+  const slug = await generateUniqueSlug(db, slugBase)
 
-  const compiled = await compileMarkdown(data.markdown || '', { siteId: data.siteId, allowedBlocks: data.allowedBlocks })
+  const compiled = await compileMarkdown(data.markdown || '', { allowedBlocks: data.allowedBlocks })
 
   const doc = {
-    siteId: data.siteId,
     contentType: data.contentType,
     title: data.title,
     slug,
@@ -319,20 +315,18 @@ export async function createContent(data, authorId) {
   return serializeContent({ ...doc, _id: result.insertedId })
 }
 
-export async function updateContent(id, siteId, fields, userId) {
+export async function updateContent(id, fields, userId) {
   if (!ObjectId.isValid(id)) return null
   const db = await getMongoDb()
 
   const existing = await db.collection('contents').findOne({
     _id: new ObjectId(id),
-    siteId,
     isDeleted: { $ne: true },
   })
   if (!existing) return null
 
   // Save revision before update
   await db.collection('contentRevisions').insertOne({
-    siteId,
     contentId: existing._id,
     revisionNo: existing.revisionNo || 0,
     title: existing.title,
@@ -365,11 +359,11 @@ export async function updateContent(id, siteId, fields, userId) {
 
   // Regenerate slug when title changes (unless explicit slug provided)
   if (fields.slug && fields.slug !== existing.slug) {
-    update.slug = await generateUniqueSlug(db, siteId, fields.slug.trim(), id)
+    update.slug = await generateUniqueSlug(db, fields.slug.trim(), id)
     update.slugBase = fields.slug.trim()
   } else if (fields.title && fields.title !== existing.title && !fields.slug) {
     const slugBase = titleToSlug(fields.title)
-    update.slug = await generateUniqueSlug(db, siteId, slugBase, id)
+    update.slug = await generateUniqueSlug(db, slugBase, id)
     update.slugBase = slugBase
   }
 
@@ -381,7 +375,7 @@ export async function updateContent(id, siteId, fields, userId) {
   const newTitle = fields.title !== undefined ? fields.title : existing.title
   const newSummary = fields.summary !== undefined ? fields.summary : (existing.summary || '')
   const newMarkdown = fields.markdown !== undefined ? fields.markdown : existing.markdown
-  const compiled = await compileMarkdown(newMarkdown, { siteId, allowedBlocks: fields.allowedBlocks })
+  const compiled = await compileMarkdown(newMarkdown, { allowedBlocks: fields.allowedBlocks })
   update.blocks = compiled.blocks
   update.html = compiled.html
   update.plainText = compiled.plainText
@@ -389,19 +383,19 @@ export async function updateContent(id, siteId, fields, userId) {
   update.revisionNo = (existing.revisionNo || 0) + 1
 
   const result = await db.collection('contents').findOneAndUpdate(
-    { _id: new ObjectId(id), siteId, isDeleted: { $ne: true } },
+    { _id: new ObjectId(id), isDeleted: { $ne: true } },
     { $set: update },
     { returnDocument: 'after' },
   )
   return serializeContent(result)
 }
 
-export async function deleteContent(id, siteId, userId) {
+export async function deleteContent(id, userId) {
   if (!ObjectId.isValid(id)) return false
   const db = await getMongoDb()
   const now = new Date()
   const result = await db.collection('contents').updateOne(
-    { _id: new ObjectId(id), siteId, isDeleted: { $ne: true } },
+    { _id: new ObjectId(id), isDeleted: { $ne: true } },
     { $set: { isDeleted: true, deletedAt: now, deletedBy: userId || null, updatedAt: now } },
   )
   return result.modifiedCount > 0
@@ -409,14 +403,13 @@ export async function deleteContent(id, siteId, userId) {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-export async function listPublicContents(siteId, {
+export async function listPublicContents({
   contentType = null,
   limit = 20,
   skip = 0,
 } = {}) {
   const db = await getMongoDb()
   const filter = {
-    siteId,
     status: 'published',
     visibility: 'public',
     isDeleted: { $ne: true },
@@ -436,10 +429,9 @@ export async function listPublicContents(siteId, {
   return { items: items.map(serializeContent), total }
 }
 
-export async function getPublicContentBySlug(siteId, slug) {
+export async function getPublicContentBySlug(slug) {
   const db = await getMongoDb()
   const doc = await db.collection('contents').findOne({
-    siteId,
     slug,
     status: 'published',
     visibility: 'public',
@@ -510,12 +502,10 @@ export async function getOwnContentById(userId, id) {
 
 // Create a new post authored by the given user. Forces post + draft status; ignores
 // admin-only fields (featured, categoryIds, visibility, etc.).
-export async function createOwnContent(siteId, userId, input) {
-  if (!siteId) throw new Error('siteId required')
+export async function createOwnContent(userId, input) {
   if (!userId) throw new Error('userId required')
   return createContent(
     {
-      siteId,
       contentType: 'post',
       title: input.title,
       slug: input.slug,
@@ -549,5 +539,5 @@ export async function updateOwnContent(userId, id, input) {
   }
   if (Array.isArray(input.tagIds)) fields.tagIds = input.tagIds
 
-  return updateContent(id, existing.siteId, fields, userId)
+  return updateContent(id, fields, userId)
 }
