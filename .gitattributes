@@ -1,0 +1,16 @@
+# Normalize line endings. The deploy target is Linux; shell scripts MUST stay LF
+# or the server's bash chokes on `\r` (e.g. `set -o pipefail`).
+* text=auto eol=lf
+
+# Shell scripts: always LF, never CRLF.
+*.sh text eol=lf
+*.mjs text eol=lf
+
+# Binary assets — never touch.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
