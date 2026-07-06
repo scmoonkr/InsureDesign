@@ -20,7 +20,7 @@ MVP 정적 파일은 참고 자료로만 유지한다.
 ## Directory Layout
 
 ```txt
-CMS/
+InsureDesign/
 ├─ app/
 │  ├─ assets/
 │  ├─ components/
@@ -206,8 +206,8 @@ shared/constants/styleFamilies.js
 현재 역할:
 
 ```txt
-init-db-indexes.mjs     CMS DB collection/index 생성
-verify-db-indexes.mjs   CMS DB collection/index 확인
+init-db-indexes.mjs     InsureDesign DB collection/index 생성
+verify-db-indexes.mjs   InsureDesign DB collection/index 확인
 ```
 
 ## tests

@@ -4,10 +4,10 @@
 
     <DefaultThemeHero
       eyebrow="01 · The Index · Default Theme"
-      corner="CMS"
+      :corner="siteName"
       title="The"
       emphasis="Index."
-      lede="MVP index layout is now the default public CMS theme. It uses a quiet editorial structure with serif display type, thin rules, a sticky topbar, scoped filters, and table-first content."
+      lede="MVP index layout is now the default public InsureDesign theme. It uses a quiet editorial structure with serif display type, thin rules, a sticky topbar, scoped filters, and table-first content."
       foot-left="Scroll for records"
       foot-center="↓"
       foot-right="Template · StyleFamily · Blocks"
@@ -39,7 +39,7 @@
 
     <DefaultThemeFooter
       :columns="footerColumns"
-      imprint="© 2026 CMS Default Theme · Template controlled · StyleFamily based"
+      :imprint="footerImprint"
     />
   </div>
 </template>
@@ -51,6 +51,8 @@ import DefaultThemeTable from '~/components/public/DefaultThemeTable.vue'
 import DefaultThemeTopbar from '~/components/public/DefaultThemeTopbar.vue'
 
 const navItems = useSiteNav('header')
+const siteName = useSiteName()
+const footerImprint = computed(() => `© 2026 ${siteName.value} Default Theme · Template controlled · StyleFamily based`)
 
 const columns = [
   { key: 'rank', label: 'Rank' },
@@ -78,7 +80,7 @@ const footerColumns = [
   },
   {
     title: 'Principles',
-    body: 'The CMS favors stability, verification, and structured data over free-form page building.',
+    body: 'The InsureDesign favors stability, verification, and structured data over free-form page building.',
   },
 ]
 </script>

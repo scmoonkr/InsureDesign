@@ -78,8 +78,8 @@ async function run() {
 
   console.log()
   console.log(`✓ created sample page id=${page.id} slug=${page.slug}`)
-  console.log(`  Public URL  : http://localhost:9001/page/${page.slug}`)
-  console.log(`  API check   : http://localhost:9000/api/public/contents/${page.slug}?type=page`)
+  console.log(`  Public URL  : http://localhost:9011/page/${page.slug}`)
+  console.log(`  API check   : http://localhost:9010/api/public/contents/${page.slug}?type=page`)
   console.log()
   console.log(`  Backend edit: not yet (only posts.vue exists; pages.vue is a future page).`)
   process.exit(0)

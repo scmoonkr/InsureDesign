@@ -161,7 +161,7 @@ church-news-3
 
 ## Design Freedom Policy
 
-콘텐츠 작성자는 내용을 편집하고, 디자인 시스템은 CMS가 통제한다.
+콘텐츠 작성자는 내용을 편집하고, 디자인 시스템은 InsureDesign가 통제한다.
 
 허용:
 

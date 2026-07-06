@@ -5,15 +5,17 @@
 </template>
 
 <script setup lang="ts">
-const config  = useSiteConfig()
-const apiBase = useApiBase()
+const config   = useSiteConfig()
+const apiBase  = useApiBase()
+const siteName = useSiteName()
 
 useHead({
-  title: () => config.value.siteName || 'CMS',
+  title: () => siteName.value,
   link:  () => {
     const raw = config.value.faviconUrl
-    if (!raw) return []
-    const href = raw.startsWith('http') ? raw : `${apiBase}${raw}`
+    const href = raw
+      ? (raw.startsWith('http') ? raw : `${apiBase}${raw}`)
+      : '/favicon.ico'
     return [{ rel: 'icon', href }]
   },
 })

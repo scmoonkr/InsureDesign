@@ -14,14 +14,14 @@ echo "=== [3/5] build Nuxt ==="
 npm run build
 
 echo "=== [4/5] restart PM2 ==="
-pm2 describe CMS-api >/dev/null 2>&1 \
-  && pm2 restart CMS-api --update-env \
-  || pm2 start "$PROJECT_DIR/api-server/index.mjs" --name CMS-api --cwd "$PROJECT_DIR" --update-env
+pm2 describe InsureDesign-api >/dev/null 2>&1 \
+  && pm2 restart InsureDesign-api --update-env \
+  || pm2 start "$PROJECT_DIR/api-server/index.mjs" --name InsureDesign-api --cwd "$PROJECT_DIR" --update-env
 
-pm2 describe CMS-client >/dev/null 2>&1 \
-  && NUXT_PUBLIC_API_BASE='' PORT=9001 pm2 restart CMS-client --update-env \
-  || NUXT_PUBLIC_API_BASE='' PORT=9001 pm2 start "$PROJECT_DIR/.output/server/index.mjs" \
-       --name CMS-client \
+pm2 describe InsureDesign-client >/dev/null 2>&1 \
+  && NUXT_PUBLIC_API_BASE='' PORT=9011 pm2 restart InsureDesign-client --update-env \
+  || NUXT_PUBLIC_API_BASE='' PORT=9011 pm2 start "$PROJECT_DIR/.output/server/index.mjs" \
+       --name InsureDesign-client \
        --cwd "$PROJECT_DIR" \
        --update-env
 			 

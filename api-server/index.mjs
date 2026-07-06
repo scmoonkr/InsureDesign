@@ -1556,6 +1556,8 @@ async function fetchAccessToken(provider, code, state, redirectUri) {
   )
 
   if (!response.ok) {
+    const detail = await response.text().catch(() => '')
+    console.error(`[oauth] ${provider} token request failed (${response.status}): ${detail}`)
     throw new Error(`${provider} token request failed`)
   }
 
@@ -2210,6 +2212,6 @@ const server = http.createServer(handleRequest)
 const { apiPort, uploadDir } = getConfig()
 
 server.listen(apiPort, () => {
-  console.log(`CMS API server listening on http://localhost:${apiPort}`)
+  console.log(`InsureDesign API server listening on http://localhost:${apiPort}`)
   console.log(`Upload directory: ${uploadDir}`)
 })

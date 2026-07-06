@@ -151,7 +151,7 @@
 </template>
 
 <script setup lang="ts">
-// ── Props (CMS에서 설정) ──────────────────────────────────────
+// ── Props (InsureDesign에서 설정) ──────────────────────────────────────
 const props = defineProps<{
   block: {
     type?: string

@@ -181,7 +181,7 @@ const apiBase = useApiBase()
 
 // Upload paths like /uploads/... must be served by the API server.
 // In production the browser reaches them via the same Apache origin (same-origin,
-// no prefix needed).  In development apiBase is http://localhost:9000 so we
+// no prefix needed).  In development apiBase is http://localhost:9010 so we
 // extract only the origin (host+port) as the prefix.
 function toAbsUrl(p: string) {
   if (!p) return ''

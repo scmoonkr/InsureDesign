@@ -78,7 +78,7 @@
       </section>
     </main>
 
-    <DefaultThemeFooter :columns="footerColumns" imprint="© 2026 CMS · Template controlled · StyleFamily based" />
+    <DefaultThemeFooter :columns="footerColumns" :imprint="footerImprint" />
   </div>
 </template>
 
@@ -154,6 +154,8 @@ const _fallbackFooter = [
 ]
 const _dynamicFooter = useSiteFooterColumns()
 const footerColumns = computed(() => _dynamicFooter.value.length ? _dynamicFooter.value : _fallbackFooter)
+const siteName = useSiteName()
+const footerImprint = computed(() => `© 2026 ${siteName.value} · Template controlled · StyleFamily based`)
 
 if (error.value) {
   throw createError({ statusCode: 404, statusMessage: 'Not found' })

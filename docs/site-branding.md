@@ -49,11 +49,11 @@ DefaultThemeTopbar.vue        → 로고 이미지 / 브랜드명
 
 ---
 
-## 멀티사이트 동작
+## 사이트 설정
 
-도메인이 여러 개인 경우 요청 `Host` 헤더 → `sites` 컬렉션의 `domains` 배열 매칭 → 해당 `siteId`의 `settings` 문서를 반환합니다.
+단일 사이트 구조입니다. 브랜딩은 `settings` 컬렉션의 단일 문서(`{ key: 'site' }`)에서 관리하며, `/api/public/site-config`로 노출됩니다.
 
-`DEFAULT_SITE_ID` 환경변수로 기본 사이트를 지정합니다 (`.env`).
+`settings.siteName`이 비어 있을 때의 폴백은 `.env`의 `SITE_NAME`입니다.
 
 ---
 

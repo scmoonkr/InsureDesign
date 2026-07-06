@@ -134,7 +134,7 @@ const siteConfig = useSiteConfig()
 const displayTitle = computed(() => props.title || siteConfig.value.siteName)
 const logoSrc = computed(() => {
   const raw = siteConfig.value.logoUrl
-  if (!raw) return '/themes/default/logo.png'
+  if (!raw) return '/default_logo.png'
   return raw.startsWith('http') ? raw : `${apiBase}${raw}`
 })
 const authMeUrl = `${apiBase}/api/auth/me`

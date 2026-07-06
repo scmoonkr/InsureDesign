@@ -34,7 +34,7 @@
       </section>
     </main>
 
-    <DefaultThemeFooter :columns="footerColumns" imprint="© 2026 CMS Default Theme · Errata pattern" />
+    <DefaultThemeFooter :columns="footerColumns" :imprint="footerImprint" />
   </div>
 </template>
 
@@ -44,6 +44,8 @@ import DefaultThemeTable from '~/components/public/DefaultThemeTable.vue'
 import DefaultThemeTopbar from '~/components/public/DefaultThemeTopbar.vue'
 
 const navItems = useSiteNav('header')
+const siteName = useSiteName()
+const footerImprint = computed(() => `© 2026 ${siteName.value} Default Theme · Errata pattern`)
 
 const columns = [
   { key: 'rank', label: 'No.' },

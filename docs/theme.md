@@ -4,11 +4,11 @@
 
 완전 자유 편집 UI는 제공하지 않는다.
 
-관리자는 미리 정의된 Template과 StyleFamily를 선택한다. 작성자는 허용된 범위 안에서 콘텐츠를 작성하고, 디자인 시스템은 CMS가 통제한다.
+관리자는 미리 정의된 Template과 StyleFamily를 선택한다. 작성자는 허용된 범위 안에서 콘텐츠를 작성하고, 디자인 시스템은 InsureDesign가 통제한다.
 
 ```txt
 사용자는 내용을 편집한다.
-디자인 시스템은 CMS가 통제한다.
+디자인 시스템은 InsureDesign가 통제한다.
 레이아웃은 Template이 결정한다.
 표현 확장은 허용된 Block만 사용한다.
 스타일은 StyleFamily 안에서만 선택한다.

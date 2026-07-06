@@ -58,7 +58,7 @@ users {
 
 ## New User Default
 
-신규 OAuth 가입자는 `[{ siteId: DEFAULT_SITE_ID, role: 'member' }]`로 생성됩니다.
+신규 OAuth 가입자는 `[{ role: 'member' }]`로 생성됩니다. (단일 사이트 — siteId 없음)
 backend 접근이 필요한 사용자는 admin이 `/backend/users`에서 role을 manager 이상으로 승격해야 합니다.
 
 ## Permission Detail

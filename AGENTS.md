@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-이 프로젝트는 Node.js + MongoDB + Vue/Nuxt 기반의 단일 사이트 CMS이다.
+이 프로젝트는 Node.js + MongoDB + Vue/Nuxt 기반의 단일 사이트 InsureDesign이다.
 
 핵심 목표:
 
-- Markdown 중심 CMS
+- Markdown 중심 InsureDesign
 - Minimal Block 확장
 - 선택형 Template UI
 - Style Family 기반 디자인

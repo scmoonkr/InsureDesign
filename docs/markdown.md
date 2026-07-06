@@ -2,7 +2,7 @@
 
 ## Markdown Policy
 
-CMS 본문은 Markdown을 기본 원본으로 사용한다.
+InsureDesign 본문은 Markdown을 기본 원본으로 사용한다.
 
 ```txt
 Markdown = 기본 문서
@@ -175,7 +175,7 @@ style: primary
 :::
 ```
 
-작성자가 직접 색상, padding, margin을 지정할 수 없다. `style`은 CMS가 미리 정의한 값만 허용한다.
+작성자가 직접 색상, padding, margin을 지정할 수 없다. `style`은 InsureDesign가 미리 정의한 값만 허용한다.
 
 ## gallery Block
 

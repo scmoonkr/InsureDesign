@@ -66,7 +66,7 @@
 
     <!-- ── Drawer ── -->
     <div v-if="drawerOpen" class="theme-backend-user-modal" @click="closeDrawer">
-      <div class="theme-backend-user-drawer theme-backend-sites-drawer" @click.stop>
+      <div class="theme-backend-user-drawer theme-backend-compact-drawer" @click.stop>
         <div class="theme-backend-user-drawer-head">
           <strong>{{ isNewMode ? 'New Category' : form.name || 'Category' }}</strong>
           <button type="button" class="theme-backend-close" aria-label="Close" @click="closeDrawer">×</button>

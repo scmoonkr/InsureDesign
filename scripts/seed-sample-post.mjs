@@ -69,7 +69,7 @@ function buildMarkdown(imageIds) {
   const sections = []
 
   sections.push('# 모든 블록을 사용한 샘플 글')
-  sections.push('이 글은 CMS에 등록된 10종 block을 모두 한 번에 보여주기 위한 샘플입니다. 위에서부터 순서대로 각 블록의 실제 렌더링을 확인할 수 있습니다.')
+  sections.push('이 글은 InsureDesign에 등록된 10종 block을 모두 한 번에 보여주기 위한 샘플입니다. 위에서부터 순서대로 각 블록의 실제 렌더링을 확인할 수 있습니다.')
 
   sections.push('## 1. Notice — 공지 박스')
   sections.push(':::notice\ntype: info\n\n이것은 info 톤의 공지입니다. 작성자가 쓰는 일반적인 안내문이 들어갑니다.\n:::')
@@ -122,7 +122,7 @@ function buildMarkdown(imageIds) {
   sections.push(':::map\nlat: 37.5665\nlng: 126.9780\nzoom: 15\ntitle: 서울 시청\n:::')
 
   sections.push('## 마무리')
-  sections.push('여기까지가 현재 CMS에 등록된 모든 block 유형의 렌더링 결과입니다. 새 block은 `shared/blocks/registry.js`에 schema 추가 + 서버 renderer + Vue component 한 쌍씩만 늘리면 됩니다.')
+  sections.push('여기까지가 현재 InsureDesign에 등록된 모든 block 유형의 렌더링 결과입니다. 새 block은 `shared/blocks/registry.js`에 schema 추가 + 서버 renderer + Vue component 한 쌍씩만 늘리면 됩니다.')
 
   return sections.join('\n\n')
 }
@@ -187,10 +187,10 @@ async function run() {
 
   console.log()
   console.log(`✓ created sample post id=${post.id} slug=${post.slug}`)
-  console.log(`  Public URL  : http://localhost:9001/post/${post.slug}`)
-  console.log(`  API check   : http://localhost:9000/api/public/contents/${post.slug}?type=post`)
+  console.log(`  Public URL  : http://localhost:9011/post/${post.slug}`)
+  console.log(`  API check   : http://localhost:9010/api/public/contents/${post.slug}?type=post`)
   console.log()
-  console.log(`  Backend edit: http://localhost:9001/backend/posts  (open the row to edit)`)
+  console.log(`  Backend edit: http://localhost:9011/backend/posts  (open the row to edit)`)
   process.exit(0)
 }
 

@@ -29,9 +29,9 @@ Copy-Item .env.example .env
 
 최소 필수 설정:
 
-- `PORT` (API 서버 포트, 기본 9000)
-- `SITE_URL` (웹 주소, 예: `http://localhost:9001`)
-- `NUXT_PUBLIC_API_BASE` (예: `http://localhost:9000`)
+- `PORT` (API 서버 포트, 기본 9010)
+- `SITE_URL` (웹 주소, 예: `http://localhost:9011`)
+- `NUXT_PUBLIC_API_BASE` (예: `http://localhost:9010`)
 - `MONGODB_ADDR`, `MONGO_USERNAME`, `MONGO_PWD`, `MONGO_DBNAME`
 - `JWT_SECRET`, `SESSION_SECRET`, `NUXT_SESSION_PASSWORD`
 
@@ -43,8 +43,8 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-- `SITE_URL`의 포트를 기준으로 웹 서버 포트가 결정됩니다. (기본 9001)
-- API 포트는 `PORT`를 사용합니다. (기본 9000)
+- `SITE_URL`의 포트를 기준으로 웹 서버 포트가 결정됩니다. (기본 9011)
+- API 포트는 `PORT`를 사용합니다. (기본 9010)
 
 API 서버만 단독 실행:
 

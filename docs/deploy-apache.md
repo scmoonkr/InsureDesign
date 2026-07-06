@@ -4,7 +4,7 @@
 
 CentOS + Apache httpd 기반 운영 환경 설정이다.
 
-이 CMS는 단일 Nuxt 인스턴스와 단일 API 서버로 여러 도메인을 함께 처리한다.  
+이 InsureDesign는 단일 Nuxt 인스턴스와 단일 API 서버로 여러 도메인을 함께 처리한다.  
 도메인별로 별도 Node.js 프로세스를 띄우지 않고, Apache가 Host 헤더를 보존한 채  
 같은 백엔드로 라우팅하면 API 서버가 도메인 → siteId 를 결정한다.
 
@@ -12,9 +12,9 @@ CentOS + Apache httpd 기반 운영 환경 설정이다.
 브라우저 (insuredesign.co.kr 또는 oneminutebible.co.kr)
   ↓ HTTPS
 Apache httpd
-  ├── /api/*      → API server  :9000  (siteId 해석)
-  ├── /uploads/*  → API server  :9000  (정적 파일)
-  └── /*          → Nuxt        :9001  (Host 헤더로 siteId 판단)
+  ├── /api/*      → API server  :9010  (siteId 해석)
+  ├── /uploads/*  → API server  :9010  (정적 파일)
+  └── /*          → Nuxt        :9011  (Host 헤더로 siteId 판단)
 ```
 
 `ProxyPreserveHost On` 이 핵심이다.  
@@ -67,18 +67,18 @@ API 서버가 `sites` 컬렉션에서 siteId 를 결정할 수 있다.
     # WebSocket 지원 (Nuxt dev HMR 또는 실시간 기능)
     RewriteEngine On
     RewriteCond %{HTTP:Upgrade} =websocket [NC]
-    RewriteRule /(.*)           ws://localhost:9001/$1 [P,L]
+    RewriteRule /(.*)           ws://localhost:9011/$1 [P,L]
 
     # API 서버로 라우팅
-    ProxyPass        /api/      http://localhost:9000/api/
-    ProxyPassReverse /api/      http://localhost:9000/api/
+    ProxyPass        /api/      http://localhost:9010/api/
+    ProxyPassReverse /api/      http://localhost:9010/api/
 
-    ProxyPass        /uploads/  http://localhost:9000/uploads/
-    ProxyPassReverse /uploads/  http://localhost:9000/uploads/
+    ProxyPass        /uploads/  http://localhost:9010/uploads/
+    ProxyPassReverse /uploads/  http://localhost:9010/uploads/
 
     # 나머지는 Nuxt로
-    ProxyPass        /          http://localhost:9001/
-    ProxyPassReverse /          http://localhost:9001/
+    ProxyPass        /          http://localhost:9011/
+    ProxyPassReverse /          http://localhost:9011/
 
     ErrorLog  /var/log/httpd/insuredesign-error.log
     CustomLog /var/log/httpd/insuredesign-access.log combined
@@ -112,16 +112,16 @@ API 서버가 `sites` 컬렉션에서 siteId 를 결정할 수 있다.
 
     RewriteEngine On
     RewriteCond %{HTTP:Upgrade} =websocket [NC]
-    RewriteRule /(.*)           ws://localhost:9001/$1 [P,L]
+    RewriteRule /(.*)           ws://localhost:9011/$1 [P,L]
 
-    ProxyPass        /api/      http://localhost:9000/api/
-    ProxyPassReverse /api/      http://localhost:9000/api/
+    ProxyPass        /api/      http://localhost:9010/api/
+    ProxyPassReverse /api/      http://localhost:9010/api/
 
-    ProxyPass        /uploads/  http://localhost:9000/uploads/
-    ProxyPassReverse /uploads/  http://localhost:9000/uploads/
+    ProxyPass        /uploads/  http://localhost:9010/uploads/
+    ProxyPassReverse /uploads/  http://localhost:9010/uploads/
 
-    ProxyPass        /          http://localhost:9001/
-    ProxyPassReverse /          http://localhost:9001/
+    ProxyPass        /          http://localhost:9011/
+    ProxyPassReverse /          http://localhost:9011/
 
     ErrorLog  /var/log/httpd/oneminutebible-error.log
     CustomLog /var/log/httpd/oneminutebible-access.log combined
@@ -153,25 +153,24 @@ path-based 라우팅이므로 브라우저 API 요청이 같은 도메인의 `/a
 
 ```env
 # API 서버 (.env)
-ALLOWED_ORIGINS=https://insuredesign.co.kr,https://oneminutebible.co.kr
-DEFAULT_SITE_ID=default
+ALLOWED_ORIGINS=https://insuredesign.co.kr
 
 # Nuxt (.env)
 #
 # NUXT_PUBLIC_API_BASE  — 브라우저(클라이언트) JS 가 API 를 호출할 때 사용하는 base.
-#   프로덕션: /api  (same-origin, Apache 가 :9000 으로 프록시)
-#   로컬 개발: http://localhost:9000  (직접 접근)
+#   프로덕션: /api  (same-origin, Apache 가 :9010 으로 프록시)
+#   로컬 개발: http://localhost:9010  (직접 접근)
 NUXT_PUBLIC_API_BASE=/api
 #
 # API_INTERNAL_BASE  — Nuxt SSR(서버) 가 API 서버를 직접 호출할 때 사용하는 base.
-#   프로덕션/개발 공통: http://localhost:9000
+#   프로덕션/개발 공통: http://localhost:9010
 #   NUXT_PUBLIC_API_BASE 와 분리해야 SSR 은 내부망, 브라우저는 Apache 경유가 된다.
-API_INTERNAL_BASE=http://localhost:9000
+API_INTERNAL_BASE=http://localhost:9010
 ```
 
 > **왜 두 개가 필요한가?**  
-> `NUXT_PUBLIC_API_BASE=http://localhost:9000` 을 하나로 쓰면 SSR 에서는 동작하지만,  
-> 클라이언트 JS 가 브라우저에서 `localhost:9000` 을 호출하려 할 때 사용자 PC 의 9000 포트를  
+> `NUXT_PUBLIC_API_BASE=http://localhost:9010` 을 하나로 쓰면 SSR 에서는 동작하지만,  
+> 클라이언트 JS 가 브라우저에서 `localhost:9010` 을 호출하려 할 때 사용자 PC 의 9010 포트를  
 > 찾게 되어 연결 실패 → 동적 페이지가 404 처럼 보인다.  
 > F5 를 누르면 SSR 이 다시 실행되므로 정상 렌더링되는 이유가 바로 이 때문이다.
 
@@ -184,7 +183,7 @@ API_INTERNAL_BASE=http://localhost:9000
 ```
 브라우저: GET https://insuredesign.co.kr/api/public/site-config
   → Apache VirtualHost insuredesign.co.kr
-  → ProxyPass /api/ → localhost:9000/api/
+  → ProxyPass /api/ → localhost:9010/api/
   → API server: req.headers.host = "insuredesign.co.kr"  ← ProxyPreserveHost
   → resolveSiteId: getSiteByDomain("insuredesign.co.kr") → siteId: "insure"
 ```
@@ -193,8 +192,8 @@ API_INTERNAL_BASE=http://localhost:9000
 
 ```
 Nuxt SSR (site-theme plugin, useSiteNav, [slug].vue 등):
-  useApiBase() → config.apiInternalBase → "http://localhost:9000"
-  $fetch("http://localhost:9000/api/public/site-config", {
+  useApiBase() → config.apiInternalBase → "http://localhost:9010"
+  $fetch("http://localhost:9010/api/public/site-config", {
     headers: { "x-site-host": "insuredesign.co.kr" }   ← useRequestHeaders로 전달
   })
   → API server: x-site-host 헤더로 siteId 결정 → "insure"
@@ -206,7 +205,7 @@ Nuxt SSR (site-theme plugin, useSiteNav, [slug].vue 등):
 브라우저 (client-side navigation, useSiteNav re-run 등):
   useApiBase() → config.public.apiBase → "/api"
   $fetch("/api/public/menus/header", ...)
-  → 같은 도메인의 /api/ → Apache ProxyPass → localhost:9000
+  → 같은 도메인의 /api/ → Apache ProxyPass → localhost:9010
 ```
 
 ---
@@ -240,12 +239,12 @@ certbot renew --dry-run
 node scripts/seed-insure-site.mjs
 
 # 또는 API 방식 (세션 쿠키 필요)
-curl -X POST http://localhost:9000/api/admin/sites \
+curl -X POST http://localhost:9010/api/admin/sites \
   -H 'Content-Type: application/json' \
   -b 'session=...' \
   -d '{"siteId":"bible","name":"One Minute Bible"}'
 
-curl -X POST http://localhost:9000/api/admin/sites/bible/domains \
+curl -X POST http://localhost:9010/api/admin/sites/bible/domains \
   -H 'Content-Type: application/json' \
   -b 'session=...' \
   -d '{"host":"oneminutebible.co.kr","isPrimary":true}'
@@ -263,13 +262,13 @@ curl -X POST http://localhost:9000/api/admin/sites/bible/domains \
 |------|------|-----------|
 | 80   | HTTP (→ HTTPS redirect) | Apache |
 | 443  | HTTPS | Apache |
-| 9000 | API server (Node.js) | localhost only |
-| 9001 | Nuxt frontend (Node.js) | localhost only |
+| 9010 | API server (Node.js) | localhost only |
+| 9011 | Nuxt frontend (Node.js) | localhost only |
 
-9000, 9001 은 방화벽에서 외부 접근을 차단하고 Apache 가 proxy 로만 접근한다.
+9010, 9011 은 방화벽에서 외부 접근을 차단하고 Apache 가 proxy 로만 접근한다.
 
 ```bash
-# firewalld 기준 — 9000, 9001 은 열지 않는다
+# firewalld 기준 — 9010, 9011 은 열지 않는다
 firewall-cmd --list-ports          # 확인
 firewall-cmd --permanent --add-service=http
 firewall-cmd --permanent --add-service=https
