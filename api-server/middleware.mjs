@@ -2,11 +2,13 @@ import { getAuthSession } from './auth-session.mjs'
 import { getUserById } from './auth-service.mjs'
 import { getConfig } from './config.mjs'
 
-// Role hierarchy: member < manager < admin < super
+// Role hierarchy: member < employee < manager < admin < super
 // super is a system-only bypass role kept for bootstrap/system operations.
-// Only member/manager/admin are surfaced in the user role UI.
-export const ROLE_LEVELS = { member: 1, manager: 2, admin: 3, super: 4 }
-export const USER_ROLES = ['member', 'manager', 'admin']
+// Only member/employee/manager/admin are surfaced in the user role UI.
+// Backend (/backend/*) access is manager+, so employee is a content-viewing tier
+// (can see employee-gated pages/posts) without management access.
+export const ROLE_LEVELS = { member: 1, employee: 2, manager: 3, admin: 4, super: 5 }
+export const USER_ROLES = ['member', 'employee', 'manager', 'admin']
 
 // Check if user meets the minimum role. super role bypasses all checks.
 export function hasRole(roles = [], minRole = 'viewer') {

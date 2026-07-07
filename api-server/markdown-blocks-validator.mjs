@@ -107,7 +107,7 @@ export function validateParsedBlocks(nodes, { allowedBlocks, pathPrefix = '' } =
   return errors
 }
 
-const VALID_ACCESS_VALUES = ['public', 'member', 'manager', 'admin']
+const VALID_ACCESS_VALUES = ['public', 'member', 'employee', 'manager', 'admin']
 
 function checkProps(node, spec) {
   if (spec.requiresContent) {

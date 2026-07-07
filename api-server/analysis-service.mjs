@@ -20,7 +20,7 @@ export async function listAnalysisDocs() {
     { $sort: { createdAt: -1 } },
     {
       $project: {
-        title: 1, customerName: 1, agentName: 1,
+        title: 1, customerName: 1, contractorName: 1, insuredAge: 1, agentName: 1,
         existingInsurancePdf: 1, proposalPdfs: 1, note: 1,
         pdfPath: 1,
         createdAt: 1, updatedAt: 1,
@@ -43,7 +43,9 @@ export async function createAnalysisDoc(data) {
   const now = new Date()
   const doc = {
     title: data.title || '',
-    customerName: data.customerName || '',
+    customerName: data.customerName || '',   // 피보험자
+    contractorName: data.contractorName || '', // 보험계약자
+    insuredAge: Number(data.insuredAge) > 0 ? Number(data.insuredAge) : null,
     agentName: data.agentName || '',
     existingInsurancePdf: data.existingInsurancePdf || null,
     proposalPdfs: Array.isArray(data.proposalPdfs) ? data.proposalPdfs.slice(0, 4) : [],
@@ -60,10 +62,13 @@ export async function createAnalysisDoc(data) {
 export async function updateAnalysisDoc(id, data) {
   const c = await col()
   const set = { updatedAt: new Date() }
-  const allowed = ['title', 'customerName', 'agentName', 'existingInsurancePdf',
-    'proposalPdfs', 'note', 'analysisResult', 'proposalData', 'pdfPath']
+  const allowed = ['title', 'customerName', 'contractorName', 'insuredAge', 'agentName',
+    'existingInsurancePdf', 'proposalPdfs', 'note', 'analysisResult', 'proposalData', 'pdfPath']
   for (const f of allowed) {
     if (data[f] !== undefined) set[f] = data[f]
+  }
+  if (Object.hasOwn(set, 'insuredAge')) {
+    set.insuredAge = Number(set.insuredAge) > 0 ? Number(set.insuredAge) : null
   }
   const result = await c.updateOne({ _id: new ObjectId(id) }, { $set: set })
   return result.matchedCount > 0

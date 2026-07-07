@@ -34,6 +34,7 @@
                 <th>Gender</th>
                 <th>DOB</th>
                 <th>Status</th>
+                <th>권한</th>
               </tr>
             </thead>
             <tbody>
@@ -60,6 +61,9 @@
                   <span :class="['theme-backend-status', user.status || 'pending']">
                     {{ user.status || 'pending' }}
                   </span>
+                </td>
+                <td>
+                  <span :class="['theme-backend-role', topRole(user.roles)]">{{ topRole(user.roles) }}</span>
                 </td>
               </tr>
             </tbody>
@@ -118,6 +122,16 @@
             </label>
 
             <label class="theme-form-field">
+              <span>🔒 권한</span>
+              <select v-model="form.role" name="role" :disabled="isProtectedRole">
+                <option value="member">member (일반)</option>
+                <option value="employee">employee</option>
+                <option value="manager">manager</option>
+                <option v-if="isProtectedRole" :value="form.role">{{ form.role }} (변경 불가)</option>
+              </select>
+            </label>
+
+            <label class="theme-form-field">
               <span>Date of Birth</span>
               <input v-model="form.dob" name="dob" type="date" />
             </label>
@@ -171,6 +185,15 @@ type BackendUser = {
   gender?: string
   dob?: string
   status?: string
+  roles?: { role: string }[]
+}
+
+// Highest-privilege-first order; admin/super are shown but not assignable here.
+const ROLE_ORDER = ['member', 'employee', 'manager', 'admin', 'super']
+function topRole(roles?: { role: string }[]): string {
+  if (!roles?.length) return 'member'
+  return [...roles].map(r => r.role)
+    .sort((a, b) => ROLE_ORDER.indexOf(b) - ROLE_ORDER.indexOf(a))[0] || 'member'
 }
 
 const { navItems } = useBackendMenu()
@@ -208,7 +231,11 @@ const form = reactive({
   status: 'active',
   dob: '',
   avatarUrl: '',
+  role: 'member',
 })
+
+// admin/super are protected — can't be changed from this UI (edit in DB).
+const isProtectedRole = computed(() => ['admin', 'super'].includes(form.role))
 
 const selectedUser = computed(() => users.value.find((user) => user.id === selectedUserId.value) || null)
 const initials = computed(() => Array.from((form.name || 'US').trim()).slice(0, 2).join('').toUpperCase())
@@ -231,6 +258,7 @@ function fillForm(user: BackendUser) {
   form.status = user.status || 'pending'
   form.dob = user.dob || ''
   form.avatarUrl = user.avatarUrl || ''
+  form.role = topRole(user.roles)
 }
 
 function startEdit(user: BackendUser) {
@@ -252,6 +280,7 @@ function clearForm() {
   form.status = 'pending'
   form.dob = ''
   form.avatarUrl = ''
+  form.role = 'member'
 }
 
 async function saveUser() {
@@ -274,6 +303,7 @@ async function saveUser() {
         status: form.status,
         dob: form.dob,
         avatarUrl: form.avatarUrl,
+        role: form.role,
       },
     })
 

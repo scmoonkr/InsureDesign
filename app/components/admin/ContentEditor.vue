@@ -111,6 +111,7 @@
             <select v-model="customBlockAccess" style="width:100px">
               <option value="public">공개</option>
               <option value="member">member</option>
+              <option value="employee">employee</option>
               <option value="manager">manager</option>
               <option value="admin">admin</option>
             </select>
@@ -129,6 +130,7 @@
           <div class="theme-backend-posts-block-row">
             <select v-model="accessInsertLevel" style="width:110px">
               <option value="member">member</option>
+              <option value="employee">employee</option>
               <option value="manager">manager</option>
               <option value="admin">admin</option>
             </select>
@@ -193,6 +195,16 @@
                 <option value="published">Published</option>
                 <option value="hidden">Hidden</option>
                 <option value="deleted">Deleted (휴지통)</option>
+              </select>
+            </label>
+            <label class="theme-form-field">
+              <span>🔒 접근 권한</span>
+              <select v-model="form.accessLevel">
+                <option value="public">공개 (모두)</option>
+                <option value="member">member (로그인)</option>
+                <option value="employee">employee 이상</option>
+                <option value="manager">manager 이상</option>
+                <option value="admin">admin</option>
               </select>
             </label>
           </div>
@@ -563,6 +575,7 @@ const form = reactive({
   excerpt: '',
   markdown: '',
   status: 'draft',
+  accessLevel: 'public',
   thumbnailImageId: '',
   // shared meta — show the eyebrow line (categories / contentType label) above the title
   showEyebrow: true,
@@ -973,6 +986,7 @@ async function loadDetail() {
     form.markdown = c.markdown || ''
     form.thumbnailImageId = c.thumbnailImageId ? String(c.thumbnailImageId) : ''
     form.status = c.status || 'draft'
+    form.accessLevel = c.accessLevel || 'public'
     form.categoryIds = (c.categoryIds || []).map(String)
     // showEyebrow defaults to true when meta is missing the field (preserves
     // existing posts' eyebrow visibility before this toggle existed).
@@ -1022,6 +1036,7 @@ function buildSaveBody(): Record<string, unknown> {
   }
   if (isAdmin.value) {
     base.status = form.status
+    base.accessLevel = form.accessLevel   // page/post role gate
     base.categoryIds = form.categoryIds   // both posts and pages
     if (isPost.value) {
       base.featured = form.featured

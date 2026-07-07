@@ -4,7 +4,7 @@
 // Runs on the client only — SSR is allowed to render the page shell so direct
 // link visits don't 404 mid-stream; the redirect happens right after hydration.
 
-const ROLE_LEVELS: Record<string, number> = { member: 1, manager: 2, admin: 3, super: 4 }
+const ROLE_LEVELS: Record<string, number> = { member: 1, employee: 2, manager: 3, admin: 4, super: 5 }
 const MIN_BACKEND_LEVEL = ROLE_LEVELS.manager
 
 type Role = { role: string }

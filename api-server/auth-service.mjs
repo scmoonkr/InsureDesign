@@ -135,6 +135,22 @@ export async function updateUserProfile(userId, input) {
   return toPublicUser(user)
 }
 
+// Set a user's role (single-role model: roles = [{ role }]). Admin-gated by caller.
+export async function setUserRole(userId, role) {
+  if (!ObjectId.isValid(userId)) {
+    return null
+  }
+
+  const db = await getMongoDb()
+  const user = await db.collection('users').findOneAndUpdate(
+    { _id: new ObjectId(userId), isDeleted: { $ne: true } },
+    { $set: { roles: [{ role }], updatedAt: new Date() } },
+    { returnDocument: 'after' },
+  )
+
+  return toPublicUser(user)
+}
+
 export async function deleteUserById(userId) {
   if (!ObjectId.isValid(userId)) {
     return false

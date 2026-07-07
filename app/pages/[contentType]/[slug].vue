@@ -68,6 +68,14 @@
         </article>
       </template>
 
+      <section v-else-if="locked" class="public-content-error">
+        <h1>🔒</h1>
+        <p v-if="lockedRequiresLogin">로그인이 필요한 콘텐츠입니다.</p>
+        <p v-else>이 콘텐츠를 볼 권한이 없습니다.</p>
+        <NuxtLink v-if="lockedRequiresLogin" to="/login">로그인 →</NuxtLink>
+        <NuxtLink v-else to="/">← 홈으로</NuxtLink>
+      </section>
+
       <section v-else-if="error" class="public-content-error">
         <h1>404</h1>
         <p>요청하신 콘텐츠를 찾을 수 없습니다.</p>
@@ -100,11 +108,15 @@ type MediaInfo = { paths?: { original?: string }; title?: string; alt?: string }
 type LabelRef = { id: string; name: string; slug: string }
 type Author = { id: string; name: string; avatarUrl?: string } | null
 type PublicResponse = {
-  content: Content
-  mediaMap: Record<string, MediaInfo>
-  categoryLabels: LabelRef[]
-  tagLabels: LabelRef[]
-  author: Author
+  content?: Content
+  mediaMap?: Record<string, MediaInfo>
+  categoryLabels?: LabelRef[]
+  tagLabels?: LabelRef[]
+  author?: Author
+  // Role-gated page/post the requester may not view.
+  locked?: boolean
+  accessLevel?: string
+  requiresLogin?: boolean
 }
 
 definePageMeta({
@@ -130,6 +142,8 @@ const { data, error } = await useFetch<PublicResponse>(url, {
 })
 
 const content = computed(() => data.value?.content ?? null)
+const locked = computed(() => data.value?.locked === true)
+const lockedRequiresLogin = computed(() => data.value?.requiresLogin === true)
 const mediaMap = computed(() => data.value?.mediaMap ?? {})
 const categoryLabels = computed(() => data.value?.categoryLabels ?? [])
 const tagLabels = computed(() => data.value?.tagLabels ?? [])

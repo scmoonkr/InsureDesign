@@ -266,6 +266,12 @@ function toObjectIdArray(input) {
   return out
 }
 
+// Page/post role gate. Hierarchical: public < member < employee < manager < admin.
+export const VALID_ACCESS_LEVELS = ['public', 'member', 'employee', 'manager', 'admin']
+export function normalizeAccessLevel(value) {
+  return VALID_ACCESS_LEVELS.includes(value) ? value : 'public'
+}
+
 export async function createContent(data, authorId) {
   const db = await getMongoDb()
   const now = new Date()
@@ -296,6 +302,7 @@ export async function createContent(data, authorId) {
     imageIds: [],
     status: data.status || 'draft',
     visibility: data.visibility || 'public',
+    accessLevel: normalizeAccessLevel(data.accessLevel),
     authorId: authorId || null,
     publishedAt: data.status === 'published' ? now : null,
     scheduledAt: null,
@@ -342,13 +349,14 @@ export async function updateContent(id, fields, userId) {
   const now = new Date()
   const allowed = [
     'title', 'summary', 'markdown', 'template', 'styleFamily',
-    'status', 'visibility', 'thumbnailImageId', 'meta',
+    'status', 'visibility', 'accessLevel', 'thumbnailImageId', 'meta',
   ]
   const update = { updatedAt: now, updatedBy: userId || null }
 
   for (const key of allowed) {
     if (Object.hasOwn(fields, key)) update[key] = fields[key]
   }
+  if (Object.hasOwn(update, 'accessLevel')) update.accessLevel = normalizeAccessLevel(update.accessLevel)
   if (Object.hasOwn(fields, 'categoryIds')) update.categoryIds = toObjectIdArray(fields.categoryIds)
   if (Object.hasOwn(fields, 'tagIds')) update.tagIds = toObjectIdArray(fields.tagIds)
   if (Object.hasOwn(fields, 'thumbnailImageId')) {
@@ -407,6 +415,7 @@ export async function listPublicContents({
   contentType = null,
   limit = 20,
   skip = 0,
+  allowedAccessLevels = null,
 } = {}) {
   const db = await getMongoDb()
   const filter = {
@@ -415,6 +424,14 @@ export async function listPublicContents({
     isDeleted: { $ne: true },
   }
   if (contentType) filter.contentType = contentType
+  // Hide entries above the requester's role. Missing/null accessLevel = public.
+  if (allowedAccessLevels) {
+    filter.$or = [
+      { accessLevel: { $in: allowedAccessLevels } },
+      { accessLevel: { $exists: false } },
+      { accessLevel: null },
+    ]
+  }
 
   const [items, total] = await Promise.all([
     db.collection('contents')

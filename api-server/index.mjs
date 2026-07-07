@@ -9,10 +9,10 @@ import { ObjectId } from 'mongodb'
 import { getMongoDb } from './mongo.mjs'
 import { clearAuthSession, createOAuthState, getAuthSession, setAuthSession, verifyOAuthState } from './auth-session.mjs'
 import { getConfig, loadEnv } from './config.mjs'
-import { deleteUserById, getUserById, listUsers, updateUserProfile, upsertSocialUser } from './auth-service.mjs'
+import { deleteUserById, getUserById, listUsers, setUserRole, updateUserProfile, upsertSocialUser } from './auth-service.mjs'
 import { listMedia, createMedia, updateMediaMeta, deleteMedia, getMediaByIds } from './media-service.mjs'
 import { getSiteConfig, updateSiteTheme } from './settings-service.mjs'
-import { checkAdmin, checkSession } from './middleware.mjs'
+import { checkAdmin, checkSession, hasRole, ROLE_LEVELS } from './middleware.mjs'
 import { listContents, getContentById, createContent, updateContent, listPublicContents, getPublicContentBySlug, titleToSlug, collectImageIds, previewMarkdown, listOwnContents, getOwnContentById, createOwnContent, updateOwnContent } from './contents-service.mjs'
 import { listCategories, createCategory, updateCategory, deleteCategory, getCategoryBySlug, getCategoriesByIds } from './categories-service.mjs'
 import { listTags, findOrCreateTagsByNames, getTagBySlug, getTagsByIds } from './tags-service.mjs'
@@ -277,6 +277,9 @@ async function handleGetBackendUser(req, res, userId) {
   sendJson(req, res, 200, { user })
 }
 
+// Roles an admin may assign from the backend users UI (admin/super are DB-only).
+const GRANTABLE_ROLES = ['member', 'employee', 'manager']
+
 async function handleUpdateBackendUser(req, res, userId) {
   const session = getAuthSession(req)
   if (!session) {
@@ -285,17 +288,40 @@ async function handleUpdateBackendUser(req, res, userId) {
   }
 
   const input = await readJsonBody(req)
-  const validation = validateProfileInput(input)
 
+  // Role assignment is admin-only, and only when it actually changes the role.
+  // (Profile-only edits always resend the current role — those must not require
+  // admin, or managers couldn't edit profiles.) admin/super are never assignable.
+  let roleToSet = null
+  if (GRANTABLE_ROLES.includes(input.role)) {
+    const current = await getUserById(userId)
+    if (!current) { sendError(req, res, 404, 'User not found'); return }
+    const currentTop = (current.roles || []).map(r => r.role)
+      .sort((a, b) => (ROLE_LEVELS[b] || 0) - (ROLE_LEVELS[a] || 0))[0] || 'member'
+    if (currentTop !== input.role) {
+      const admin = await checkAdmin(req, 'admin')
+      if (!admin.ok) {
+        sendError(req, res, 403, '역할 변경은 admin 권한이 필요합니다.')
+        return
+      }
+      roleToSet = input.role
+    }
+  }
+
+  const validation = validateProfileInput(input)
   if (validation.error) {
     sendError(req, res, 400, validation.error)
     return
   }
 
-  const user = await updateUserProfile(userId, validation.value)
+  let user = await updateUserProfile(userId, validation.value)
   if (!user) {
     sendError(req, res, 404, 'User not found')
     return
+  }
+
+  if (roleToSet) {
+    user = await setUserRole(userId, roleToSet)
   }
 
   sendJson(req, res, 200, { user })
@@ -809,6 +835,7 @@ function validateContentInput(input) {
 
   const status = ['draft', 'published', 'hidden', 'deleted'].includes(input.status) ? input.status : 'draft'
   const visibility = ['public', 'members', 'private'].includes(input.visibility) ? input.visibility : 'public'
+  const accessLevel = ['public', 'member', 'employee', 'manager', 'admin'].includes(input.accessLevel) ? input.accessLevel : 'public'
 
   return {
     value: {
@@ -821,6 +848,7 @@ function validateContentInput(input) {
       styleFamily: typeof input.styleFamily === 'string' ? input.styleFamily : null,
       status,
       visibility,
+      accessLevel,
     },
   }
 }
@@ -1251,12 +1279,14 @@ async function handlePublicTagPage(req, res, url, slug) {
   sendJson(req, res, 200, { tag, items, total, mediaMap, authorMap })
 }
 
-// Public: list published contents
+// Public: list published contents (hides entries the requester can't access)
 async function handlePublicListContents(req, res, url) {
+  const level = await resolveRequesterLevel(req)
   const { items, total } = await listPublicContents({
     contentType: url.searchParams.get('type') || null,
     limit: url.searchParams.get('limit') || 20,
     skip: url.searchParams.get('skip') || 0,
+    allowedAccessLevels: allowedAccessLevels(level),
   })
   sendJson(req, res, 200, { items, total })
 }
@@ -1362,6 +1392,30 @@ async function handlePublicPostCards(req, res, url) {
   sendJson(req, res, 200, { items })
 }
 
+// ── Content access control (page/post level) ────────────────────────────────
+// accessLevel: public | member | employee | manager | admin. Hierarchical —
+// a user may view content whose required role level is <= their own.
+
+// Max role level of the requester (0 = anonymous / not logged in).
+async function resolveRequesterLevel(req) {
+  const session = getAuthSession(req)
+  if (!session) return 0
+  const user = await getUserById(session.id)
+  if (!user || user.status !== 'active') return 0
+  return Math.max(0, ...(user.roles || []).map(r => ROLE_LEVELS[r.role] || 0))
+}
+
+// Required role level for an accessLevel string (0 = public / no login needed).
+function accessLevelRank(accessLevel) {
+  if (!accessLevel || accessLevel === 'public') return 0
+  return ROLE_LEVELS[accessLevel] || 0
+}
+
+// accessLevel strings a user of the given level may view (always includes 'public').
+function allowedAccessLevels(level) {
+  return ['public', ...Object.keys(ROLE_LEVELS).filter(r => ROLE_LEVELS[r] <= level)]
+}
+
 // Public: get single published content by slug
 async function handlePublicGetContent(req, res, slug, url) {
   const content = await getPublicContentBySlug(slug)
@@ -1371,6 +1425,23 @@ async function handlePublicGetContent(req, res, slug, url) {
   if (wantType && content.contentType !== wantType) {
     sendError(req, res, 404, 'Not found')
     return
+  }
+
+  // Role gate: if this page/post requires a role, verify the requester's level.
+  const requiredLevel = accessLevelRank(content.accessLevel)
+  if (requiredLevel > 0) {
+    const level = await resolveRequesterLevel(req)
+    if (level < requiredLevel) {
+      sendJson(req, res, 200, {
+        locked: true,
+        accessLevel: content.accessLevel,
+        requiresLogin: level === 0,
+        title: content.title,
+        contentType: content.contentType,
+        slug: content.slug,
+      })
+      return
+    }
   }
 
   // Bundle every media doc referenced by the article — image blocks AND featured image.
@@ -1778,6 +1849,31 @@ async function callOpenAiApi(messages, maxTokens = 16000, model) {
   })
 }
 
+// Life-stage segment (A~G) from age. Boundaries mirror docs/보험분석_prompt.md.
+function ageToSegment(age) {
+  if (age === null || age === undefined || age === '') return null
+  const a = Number(age)
+  if (!Number.isFinite(a) || a <= 0) return null // 0/음수/NaN = 미입력 취급 (Number(null)===0 주의)
+  if (a <= 15) return 'A'
+  if (a <= 24) return 'B'
+  if (a <= 34) return 'C'
+  if (a <= 49) return 'D'
+  if (a <= 64) return 'E'
+  if (a <= 74) return 'F'
+  return 'G'
+}
+
+// Authoritative age/segment block injected into the analysis prompt. When the
+// user entered the insured's age we compute the life-stage type here and force
+// the model to use it (and only its template) — no more guessing age/type from
+// inconsistent PDF layouts.
+function buildAgeSegmentText(insuredAge) {
+  const seg = ageToSegment(insuredAge)
+  if (!seg) return '- 피보험자 나이: (미입력 — PDF에서 추출)\n'
+  return `- 피보험자 나이: ${Number(insuredAge)}세  ← 필수: customer.age 로 이 값을 사용\n`
+    + `- 생애주기 유형: ${seg}  ← 필수: customer.segment="${seg}" 명시하고, issueList·title·pillars 등 모든 유형별 콘텐츠를 반드시 ${seg} 유형 규칙으로만 생성 (다른 유형 템플릿 사용 금지)\n`
+}
+
 async function handleAnalyzeInsurance(req, res, id) {
   const t0 = Date.now()
   console.log(`\n[analyze] ▶ 시작 id=${id}`)
@@ -1819,8 +1915,15 @@ async function handleAnalyzeInsurance(req, res, id) {
 
   content.push({
     type: 'text',
-    text: `보험 설계 화면의 입력 정보:\n- 계약자/고객명: ${doc.customerName || ''}\n- 설계사명: ${doc.agentName || ''}\n- 설계 note: ${doc.note || ''}\n\n위 기존 보험내역 및 보험설계서 PDF를 시스템 프롬프트의 규칙에 따라 분석하여, 설명 없이 순수 JSON만 생성하세요.`,
+    text: `보험 설계 화면의 입력 정보 (PDF와 다를 경우 아래 입력값을 우선 적용):\n`
+      + `- 피보험자: ${doc.customerName || ''}\n`
+      + `- 보험계약자: ${doc.contractorName || ''}\n`
+      + `- 설계사명: ${doc.agentName || ''}\n`
+      + `- 설계 note: ${doc.note || ''}\n`
+      + buildAgeSegmentText(doc.insuredAge)
+      + `\n위 기존 보험내역 및 보험설계서 PDF를 시스템 프롬프트의 규칙에 따라 분석하여, 설명 없이 순수 JSON만 생성하세요.`,
   })
+  console.log(`[analyze] 입력: 피보험자='${doc.customerName || ''}' 계약자='${doc.contractorName || ''}' 나이=${doc.insuredAge ?? '(미입력)'} 유형=${ageToSegment(doc.insuredAge) ?? '-'}`)
 
   const systemPrompt = await loadAnalysisPrompt()
   const { openaiModel } = getConfig()
@@ -1847,17 +1950,40 @@ async function handleAnalyzeInsurance(req, res, id) {
 
   const rawText = choice.message?.content || ''
   console.log(`[analyze] 응답 텍스트 길이: ${rawText.length} chars`)
-  let analysisResult
+  let analysisResult = null
   try {
     const m = rawText.match(/\{[\s\S]*\}/)
     analysisResult = JSON.parse(m?.[0] || rawText)
-    const pages = Array.isArray(analysisResult.pages) ? analysisResult.pages.length : 0
-    console.log(`[analyze] ✔ JSON 파싱 성공: top-keys=[${Object.keys(analysisResult).join(', ')}] pages=${pages}`)
   } catch (e) {
-    analysisResult = { raw: rawText }
     console.log(`[analyze] ✖ JSON 파싱 실패: ${e.message} (raw 일부: ${rawText.slice(0, 120)}...)`)
   }
 
+  // Validate before storing. LLM degeneration (repetition loops, token-limit
+  // truncation) yields syntactically-valid-but-structurally-broken JSON — e.g.
+  // raw strings/numbers inside `pages`. Storing that crashes PDF generation
+  // later, so reject it here and ask the user to re-run instead.
+  const problems = []
+  if (choice.finish_reason === 'length') {
+    problems.push('응답이 토큰 한도에서 잘림(finish_reason=length)')
+  }
+  if (!analysisResult || typeof analysisResult !== 'object') {
+    problems.push('JSON 파싱 실패')
+  } else if (!Array.isArray(analysisResult.pages)) {
+    problems.push('pages 배열 없음')
+  } else {
+    const badPages = analysisResult.pages.filter(p => !p || typeof p !== 'object' || Array.isArray(p)).length
+    const okPages = analysisResult.pages.length - badPages
+    if (badPages > 0) problems.push(`pages에 객체가 아닌 손상 항목 ${badPages}개`)
+    if (okPages < 3) problems.push(`유효 페이지 부족(${okPages}개)`)
+  }
+
+  if (problems.length) {
+    console.log(`[analyze] ✖ 검증 실패 → 저장 안 함: ${problems.join(' / ')}`)
+    sendError(req, res, 502, `LLM 분석 결과가 손상되었습니다 (${problems.join(', ')}). 다시 시도해주세요.`)
+    return
+  }
+
+  console.log(`[analyze] ✔ 검증 통과: top-keys=[${Object.keys(analysisResult).join(', ')}] pages=${analysisResult.pages.length}`)
   await updateAnalysisDoc(id, { analysisResult })
   console.log(`[analyze] ✅ 저장 완료 id=${id} (${Date.now() - t0}ms)`)
   sendJson(req, res, 200, { ok: true, analysisResult })

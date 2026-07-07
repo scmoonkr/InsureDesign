@@ -1,9 +1,10 @@
 const ROLE_LEVELS: Record<string, number> = {
-  public:  0,
-  member:  1,
-  manager: 2,
-  admin:   3,
-  super:   4,
+  public:   0,
+  member:   1,
+  employee: 2,
+  manager:  3,
+  admin:    4,
+  super:    5,
 }
 
 type Role    = { role: string }

@@ -148,6 +148,7 @@ const POSITION_MAP     = ['tl', 'tr', 'bl', 'br']
 function renumber(pages) {
   const total = pages.length
   pages.forEach((p, i) => {
+    if (!p || typeof p !== 'object') return // skip malformed (non-object) page entries
     p.pageNo = i + 1
     if (p.eyebrow) p.eyebrow.pagination = { current: i + 1, total }
     if (p.footer)  p.footer.pageNumber  = i + 1
@@ -166,7 +167,10 @@ export async function buildProposalData(analysisResult, customerName = '고객',
 
   // Format A — already contains a pages array
   if (Array.isArray(a.pages)) {
-    const all = [...JSON.parse(JSON.stringify(openingPages)), ...JSON.parse(JSON.stringify(a.pages))]
+    // Drop malformed (non-object) page entries — corrupted LLM output can leave
+    // raw strings in the array, which would otherwise crash renumber().
+    const validPages = a.pages.filter(p => p && typeof p === 'object' && !Array.isArray(p))
+    const all = [...JSON.parse(JSON.stringify(openingPages)), ...JSON.parse(JSON.stringify(validPages))]
       .sort((x, y) => (x.pageNo || 0) - (y.pageNo || 0))
     renumber(all)
     return { ...JSON.parse(JSON.stringify(a)), pages: all, totalPages: all.length }

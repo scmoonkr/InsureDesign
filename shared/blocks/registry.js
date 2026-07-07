@@ -27,7 +27,7 @@ export const INITIAL_BLOCK_NAMES = [
 // BlockRenderer가 이 값을 읽어 BlockAccessGuard로 렌더를 제어합니다.
 // 예: :::text\naccess: member\n:::
 export const ACCESS_OPTION = {
-  access: { type: 'enum', values: ['public', 'member', 'manager', 'admin'], default: 'public' },
+  access: { type: 'enum', values: ['public', 'member', 'employee', 'manager', 'admin'], default: 'public' },
 }
 
 // Row layout tokens (mirrors the layout picker UI in BlockInsertModal).

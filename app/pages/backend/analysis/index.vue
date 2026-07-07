@@ -34,7 +34,7 @@
             <thead>
               <tr>
                 <th>Title</th>
-                <th>고객명</th>
+                <th>피보험자</th>
                 <th>설계사</th>
                 <th>기존보험</th>
                 <th>설계서</th>
@@ -52,7 +52,7 @@
                 @click="openEdit(row)"
               >
                 <td><strong>{{ row.title || '(제목 없음)' }}</strong></td>
-                <td>{{ row.customerName || '—' }}</td>
+                <td>{{ row.customerName || '—' }}<span v-if="row.insuredAge" class="theme-meta"> ({{ row.insuredAge }}세)</span></td>
                 <td>{{ row.agentName || '—' }}</td>
                 <td class="theme-meta">{{ row.existingInsurancePdf ? '✓' : '—' }}</td>
                 <td class="theme-meta">{{ row.proposalPdfs?.length || 0 }}개</td>
@@ -93,8 +93,18 @@
             </label>
             <div class="ia-row-2">
               <label class="theme-form-field">
-                <span>고객명</span>
-                <input v-model="form.customerName" maxlength="60" placeholder="홍길동" />
+                <span>피보험자</span>
+                <input v-model="form.customerName" maxlength="60" placeholder="추한복" />
+              </label>
+              <label class="theme-form-field">
+                <span>피보험자 나이 <small style="color:var(--theme-fg-faint)">(분석 핵심)</small></span>
+                <input v-model.number="form.insuredAge" type="number" min="0" max="120" placeholder="79" />
+              </label>
+            </div>
+            <div class="ia-row-2">
+              <label class="theme-form-field">
+                <span>보험계약자</span>
+                <input v-model="form.contractorName" maxlength="60" placeholder="유영순" />
               </label>
               <label class="theme-form-field">
                 <span>설계사</span>
@@ -191,10 +201,19 @@
             </div>
           </div>
 
-          <!-- 분석 결과 미리보기 -->
-          <div v-if="form.analysisResult" class="ia-section ia-analysis-preview">
-            <div class="ia-section-title">분석 결과</div>
-            <pre class="ia-json-preview">{{ JSON.stringify(form.analysisResult, null, 2) }}</pre>
+          <!-- 분석 결과 (JSON — 직접 수정 가능) -->
+          <div v-if="!isNewMode" class="ia-section ia-analysis-preview">
+            <div class="ia-section-title">분석 결과 (JSON — 직접 수정 가능)</div>
+            <textarea
+              v-model="analysisText"
+              class="ia-json-editor"
+              rows="16"
+              spellcheck="false"
+              placeholder="분석(LLM) 실행 시 채워집니다. 여기서 JSON 을 직접 수정할 수 있습니다."
+            />
+            <p v-if="analysisJsonError" class="theme-form-status error" style="margin:6px 0 0">
+              JSON 형식 오류: {{ analysisJsonError }}
+            </p>
           </div>
 
           <!-- 에러/상태 메시지 -->
@@ -250,6 +269,8 @@ type AnalysisItem = {
   id: string
   title: string
   customerName: string
+  contractorName?: string
+  insuredAge?: number | null
   agentName: string
   existingInsurancePdf: PdfFile | null
   proposalPdfs: (PdfFile | null)[]
@@ -289,6 +310,8 @@ const proposalPdfRefs = ref<HTMLInputElement[]>([])
 type FormState = {
   title: string
   customerName: string
+  contractorName: string
+  insuredAge: number | null
   agentName: string
   existingInsurancePdf: PdfFile | null
   proposalPdfs: (PdfFile | null)[]
@@ -301,6 +324,8 @@ type FormState = {
 const form = ref<FormState>({
   title: '',
   customerName: '',
+  contractorName: '',
+  insuredAge: null,
   agentName: '',
   existingInsurancePdf: null,
   proposalPdfs: [null, null, null, null],
@@ -310,10 +335,16 @@ const form = ref<FormState>({
   pdfPath: null,
 })
 
+// Editable JSON string mirror of form.analysisResult (textarea v-model).
+const analysisText = ref('')
+const analysisJsonError = ref('')
+
 function blankForm(): FormState {
   return {
     title: '',
     customerName: '',
+    contractorName: '',
+    insuredAge: null,
     agentName: '',
     existingInsurancePdf: null,
     proposalPdfs: [null, null, null, null],
@@ -326,6 +357,8 @@ function blankForm(): FormState {
 
 function openNew() {
   form.value = blankForm()
+  analysisText.value = ''
+  analysisJsonError.value = ''
   drawerId.value = ''
   isNewMode.value = true
   drawerOpen.value = true
@@ -338,6 +371,8 @@ async function openEdit(row: AnalysisItem) {
   form.value = {
     title: row.title,
     customerName: row.customerName,
+    contractorName: row.contractorName ?? '',
+    insuredAge: row.insuredAge ?? null,
     agentName: row.agentName,
     existingInsurancePdf: row.existingInsurancePdf ?? null,
     proposalPdfs: pdfs,
@@ -346,6 +381,8 @@ async function openEdit(row: AnalysisItem) {
     proposalData: null,
     pdfPath: row.pdfPath ?? null,
   }
+  analysisText.value = ''
+  analysisJsonError.value = ''
   drawerId.value = row.id
   isNewMode.value = false
   drawerOpen.value = true
@@ -360,6 +397,9 @@ async function openEdit(row: AnalysisItem) {
       form.value.analysisResult = res.item.analysisResult ?? null
       form.value.proposalData = res.item.proposalData ?? null
       form.value.pdfPath = res.item.pdfPath ?? null
+      analysisText.value = form.value.analysisResult
+        ? JSON.stringify(form.value.analysisResult, null, 2)
+        : ''
     }
   } catch { /* 실패해도 drawer는 유지 */ }
 }
@@ -469,6 +509,8 @@ function formPayload() {
   return {
     title: form.value.title,
     customerName: form.value.customerName,
+    contractorName: form.value.contractorName,
+    insuredAge: form.value.insuredAge,
     agentName: form.value.agentName,
     existingInsurancePdf: form.value.existingInsurancePdf,
     proposalPdfs: form.value.proposalPdfs.filter(Boolean),
@@ -490,8 +532,29 @@ async function saveRecord() {
       isNewMode.value = false
       await refresh()
     } else {
+      const body: Record<string, unknown> = formPayload()
+      // Persist manual edits to the analysis JSON. Empty textarea = leave as-is
+      // (avoids wiping analysisResult if it failed to load). On edit, reset the
+      // derived proposalData so the next PDF rebuilds from the edited analysis.
+      const txt = analysisText.value.trim()
+      if (txt) {
+        let parsed: unknown
+        try {
+          parsed = JSON.parse(txt)
+        } catch (e) {
+          analysisJsonError.value = e instanceof Error ? e.message : String(e)
+          isError.value = true
+          statusMsg.value = '분석 결과 JSON 형식 오류 — 저장 취소'
+          return
+        }
+        analysisJsonError.value = ''
+        body.analysisResult = parsed
+        body.proposalData = null
+        form.value.analysisResult = parsed
+        form.value.proposalData = null
+      }
       await $fetch(`${apiBase}/api/analysis/${drawerId.value}`, {
-        method: 'PUT', credentials: 'include', body: formPayload(),
+        method: 'PUT', credentials: 'include', body,
       })
       await refresh()
     }
@@ -539,6 +602,8 @@ async function analyzeRecord() {
     )
     console.log(`[analyze] ✔ 응답 수신 (${Date.now() - t0}ms)`, res)
     form.value.analysisResult = res.analysisResult
+    analysisText.value = res.analysisResult ? JSON.stringify(res.analysisResult, null, 2) : ''
+    analysisJsonError.value = ''
     await refresh()
     statusMsg.value = '분석 완료'
     console.log('[analyze] ✅ 완료 — analysisResult 저장됨')
@@ -704,6 +769,25 @@ function formatDate(iso?: string) {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+.ia-json-editor {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 220px;
+  max-height: 420px;
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 10px;
+  border: 1px solid var(--theme-line, #ddd);
+  border-radius: 6px;
+  background: var(--theme-bg, #fff);
+  color: var(--theme-fg, #1a1a1a);
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
 }
 
 .ia-drawer-actions {
