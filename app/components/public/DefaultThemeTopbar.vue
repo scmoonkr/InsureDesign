@@ -9,7 +9,7 @@
         },
       ]"
     >
-      <NuxtLink class="theme-brand" to="/theme/default">
+      <NuxtLink class="theme-brand" to="/">
         <img class="theme-logo" :src="logoSrc" alt="site logo" />
         <span class="theme-brand-text">{{ displayTitle }}</span>
       </NuxtLink>
