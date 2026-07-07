@@ -301,6 +301,15 @@
                 <span>제목·작성자·날짜 헤더 표시 (페이지는 banner)</span>
               </label>
             </label>
+
+            <label v-if="form.showEyebrow" class="theme-form-field">
+              <span>배너 글자색</span>
+              <select v-model="form.bannerTextColor">
+                <option value="auto">자동 (이미지 있으면 흰색)</option>
+                <option value="light">흰색</option>
+                <option value="dark">검정</option>
+              </select>
+            </label>
           </div>
         </div>
       </section>
@@ -618,6 +627,7 @@ const form = reactive({
   thumbnailImageId: '',
   // shared meta — show the eyebrow line (categories / contentType label) above the title
   showEyebrow: true,
+  bannerTextColor: 'auto',
   // post-only
   categoryIds: [] as string[],
   tagNamesInput: '',
@@ -1025,7 +1035,7 @@ async function loadDetail() {
         : Promise.resolve({ items: [] as Tag[] }),
     ])
     const c = detail.content as PostDetail & PageDetail & {
-      meta?: PageListItem['meta'] & PostListItem['meta'] & { showEyebrow?: boolean }
+      meta?: PageListItem['meta'] & PostListItem['meta'] & { showEyebrow?: boolean; bannerTextColor?: string }
       tagNames?: string[]
     }
     form.title = c.title || ''
@@ -1039,6 +1049,7 @@ async function loadDetail() {
     // showEyebrow defaults to true when meta is missing the field (preserves
     // existing posts' eyebrow visibility before this toggle existed).
     form.showEyebrow = c.meta?.showEyebrow !== false
+    form.bannerTextColor = c.meta?.bannerTextColor || 'auto'
 
     if (isPost.value) {
       let tagNames: string[]
@@ -1091,13 +1102,14 @@ function buildSaveBody(): Record<string, unknown> {
       base.featured = form.featured
       // For posts the admin handler merges input.meta with the `featured` flag —
       // so showEyebrow flows through that merge into the stored meta.
-      base.meta = { showEyebrow: form.showEyebrow }
+      base.meta = { showEyebrow: form.showEyebrow, bannerTextColor: form.bannerTextColor }
     } else {
       base.meta = {
         parentId: form.parentId || null,
         template: form.template,
         showInMenu: form.showInMenu,
         showEyebrow: form.showEyebrow,
+        bannerTextColor: form.bannerTextColor,
       }
     }
   }

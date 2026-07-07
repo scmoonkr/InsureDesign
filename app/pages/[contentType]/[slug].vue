@@ -20,7 +20,7 @@
               'public-content-page-banner',
               'block-title-align-center',
               'block-title-height-medium',
-              `block-title-text-${heroUrl ? 'light' : 'dark'}`,
+              `block-title-text-${bannerTextColor}`,
             ]"
             :style="pageBannerStyle"
           >
@@ -210,6 +210,16 @@ const pageBannerStyle = computed(() => {
   const s: Record<string, string> = {}
   if (heroUrl.value) s.backgroundImage = `url(${heroUrl.value})`
   return s
+})
+
+// Banner title/subtitle color. Author picks in the editor (meta.bannerTextColor):
+//   'light' → white, 'dark' → black. 'auto' (or missing) keeps the old behavior
+//   (white when there's a background image, black otherwise) — but a light image
+//   makes white unreadable, hence the manual override.
+const bannerTextColor = computed<'light' | 'dark'>(() => {
+  const c = content.value?.meta?.bannerTextColor
+  if (c === 'light' || c === 'dark') return c
+  return heroUrl.value ? 'light' : 'dark'
 })
 
 
