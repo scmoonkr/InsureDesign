@@ -225,15 +225,63 @@ const bannerTextColor = computed<string>(() => {
 })
 
 
-useHead(() => ({
-  title: content.value?.title || '404',
-  meta: [
-    ...(content.value?.summary ? [{ name: 'description', content: content.value.summary }] : []),
-    ...(heroUrl.value ? [{ property: 'og:image', content: heroUrl.value }] : []),
-    ...(content.value?.title ? [{ property: 'og:title', content: content.value.title }] : []),
-    ...(content.value?.summary ? [{ property: 'og:description', content: content.value.summary }] : []),
-  ],
-}))
+// ── SEO (page/post) ──────────────────────────────────────────────────────────
+const siteName = useSiteName()
+const siteDesc = useSiteDescription()
+const siteUrl = computed(() => String(useRuntimeConfig().public.siteUrl || '').replace(/\/$/, ''))
+
+// Rewrite media/localhost origins onto the public site URL so crawlers get a
+// reachable absolute image. External (cloud) URLs are kept as-is.
+function toPublicUrl(raw: string): string {
+  if (!raw) return ''
+  if (raw.startsWith('/')) return `${siteUrl.value}${raw}`
+  try {
+    const u = new URL(raw)
+    if (/^(localhost|127\.0\.0\.1)$/.test(u.hostname)) return `${siteUrl.value}${u.pathname}${u.search}`
+    return raw
+  } catch {
+    return `${siteUrl.value}/${raw}`
+  }
+}
+
+const seoDescription = computed(() =>
+  (content.value?.summary || siteDesc.value || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+)
+const canonicalUrl = computed(() =>
+  content.value ? `${siteUrl.value}/${contentType.value}/${slug.value}` : siteUrl.value,
+)
+const ogImage = computed(() =>
+  heroUrl.value ? toPublicUrl(heroUrl.value) : `${siteUrl.value}/default_logo.png`,
+)
+const seoKeywords = computed(() =>
+  [...categoryLabels.value.map(c => c.name), ...tagLabels.value.map(t => t.name)].join(', '),
+)
+
+useHead(() => {
+  const c = content.value
+  if (!c) return { title: '404' }
+  return {
+    title: c.title,
+    link: [{ rel: 'canonical', href: canonicalUrl.value }],
+    meta: [
+      { name: 'description', content: seoDescription.value },
+      ...(seoKeywords.value ? [{ name: 'keywords', content: seoKeywords.value }] : []),
+      { property: 'og:type', content: 'article' },
+      { property: 'og:title', content: c.title },
+      { property: 'og:description', content: seoDescription.value },
+      { property: 'og:image', content: ogImage.value },
+      { property: 'og:url', content: canonicalUrl.value },
+      { property: 'og:site_name', content: siteName.value },
+      ...(c.publishedAt ? [{ property: 'article:published_time', content: new Date(c.publishedAt).toISOString() }] : []),
+      ...categoryLabels.value.map(cat => ({ property: 'article:section', content: cat.name })),
+      ...tagLabels.value.map(t => ({ property: 'article:tag', content: t.name })),
+      { name: 'twitter:card', content: 'summary_large_image' },
+      { name: 'twitter:title', content: c.title },
+      { name: 'twitter:description', content: seoDescription.value },
+      { name: 'twitter:image', content: ogImage.value },
+    ],
+  }
+})
 
 const navItems = useSiteNav('header')
 
@@ -244,7 +292,6 @@ const _fallbackFooter = [
 ]
 const _dynamicFooter = useSiteFooterColumns()
 const footerColumns = computed(() => _dynamicFooter.value.length ? _dynamicFooter.value : _fallbackFooter)
-const siteName = useSiteName()
 const footerImprint = computed(() => `© 2026 ${siteName.value} · Template controlled · StyleFamily based`)
 
 if (error.value) {

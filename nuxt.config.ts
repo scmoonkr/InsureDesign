@@ -42,21 +42,20 @@ export default defineNuxtConfig({
       siteUrl: process.env.SITE_URL || process.env.NUXT_SITE_URL || '',
       // Fallback site name used when the DB `settings.siteName` is empty.
       siteName: process.env.SITE_NAME || 'InsureDesign',
+      // Default meta description (SEO) fallback when a page has no excerpt.
+      siteDescription: process.env.SITE_DESCRIPTION || '',
     },
   },
   app: {
     head: {
-      title: 'InsureDesign',
+      // title / description / OG defaults are set reactively in app.vue so they
+      // can follow the DB site name + env SITE_DESCRIPTION.
       htmlAttrs: {
         lang: 'ko',
       },
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-        {
-          name: 'description',
-          content: 'Markdown, Template, StyleFamily 기반 단일 사이트 InsureDesign',
-        },
       ],
     },
   },
