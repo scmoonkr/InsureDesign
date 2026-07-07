@@ -2,18 +2,19 @@
   <div class="theme-default">
     <DefaultThemeTopbar :items="navItems" />
 
-    <main :class="['public-content-shell', { 'public-content-shell-flush': isPage && showEyebrow }]">
+    <main :class="['public-content-shell', `tpl-${template}`, { 'public-content-shell-flush': useBanner && showEyebrow }]">
       <template v-if="content">
-        <!-- Hero (only for non-pages — pages get a Title Banner-style header instead) -->
-        <section v-if="heroUrl && !isPage" class="public-content-hero">
+        <!-- Hero (basic/card layout only — banner templates use the title banner instead) -->
+        <section v-if="heroUrl && !useBanner" class="public-content-hero">
           <img :src="heroUrl" :alt="content.title" />
         </section>
 
-        <article :class="['public-content', { 'with-hero': heroUrl && !isPage, 'is-page': isPage }]">
-          <!-- Pages: render the meta as a Title Banner block (title + excerpt as subtitle).
+        <div class="public-content-main">
+        <article :class="['public-content', { 'with-hero': heroUrl && !useBanner, 'is-page': useBanner }]">
+          <!-- Banner templates: render meta as a Title Banner block (title + excerpt).
                When the author disables the eyebrow toggle, hide the whole banner section. -->
           <section
-            v-if="isPage && showEyebrow"
+            v-if="useBanner && showEyebrow"
             :class="[
               'block-title',
               'public-content-page-banner',
@@ -53,7 +54,7 @@
 
           <!-- summary is shown only for non-pages with eyebrow enabled
                (pages already have it as subtitle in the banner) -->
-          <p v-if="!isPage && showEyebrow && content.summary" class="public-content-summary">{{ content.summary }}</p>
+          <p v-if="!useBanner && showEyebrow && content.summary" class="public-content-summary">{{ content.summary }}</p>
 
           <BlockRenderer :blocks="content.blocks || []" :media-map="mediaMap" />
 
@@ -66,6 +67,27 @@
             </ul>
           </footer>
         </article>
+
+        <!-- Sidebar template: 카테고리 + 최근 글 위젯 -->
+        <aside v-if="hasSidebar" class="public-content-sidebar">
+          <div class="pcs-widget">
+            <h3>카테고리</h3>
+            <ul>
+              <li v-for="c in sidebarCategories" :key="c.id">
+                <NuxtLink :to="`/categories/${c.slug}`">{{ c.name }}</NuxtLink>
+              </li>
+            </ul>
+          </div>
+          <div class="pcs-widget">
+            <h3>최근 글</h3>
+            <ul>
+              <li v-for="p in sidebarPosts" :key="p.id">
+                <NuxtLink :to="`/post/${p.slug}`">{{ p.title }}</NuxtLink>
+              </li>
+            </ul>
+          </div>
+        </aside>
+        </div>
       </template>
 
       <section v-else-if="locked" class="public-content-error">
@@ -132,6 +154,31 @@ const apiBase = useApiBase()
 const contentType = computed(() => String(route.params.contentType || ''))
 const slug = computed(() => String(route.params.slug || ''))
 const isPage = computed(() => contentType.value === 'page')
+
+// ── Template layout (basic·narrow·wide·sidebar·backend) ──────────────────────
+const VALID_TPL = ['basic', 'narrow', 'wide', 'sidebar', 'backend']
+const template = computed(() => {
+  const c = content.value as unknown as { template?: string; meta?: { template?: string } } | null
+  const t = c?.template || c?.meta?.template
+  if (t && VALID_TPL.includes(t)) return t
+  return isPage.value ? 'narrow' : 'basic' // 미설정/구값 폴백
+})
+const useBanner = computed(() => template.value !== 'basic') // basic=카드 헤더, 그 외=배너
+const hasSidebar = computed(() => template.value === 'sidebar')
+
+const sidebarCategories = ref<{ id: string; name: string; slug: string }[]>([])
+const sidebarPosts = ref<{ id: string; title: string; slug: string }[]>([])
+onMounted(async () => {
+  if (!hasSidebar.value) return
+  try {
+    const [cats, posts] = await Promise.all([
+      $fetch<{ items: { id: string; name: string; slug: string }[] }>(`${apiBase}/api/public/categories`),
+      $fetch<{ items: { id: string; title: string; slug: string }[] }>(`${apiBase}/api/public/post-cards?limit=5`),
+    ])
+    sidebarCategories.value = cats.items || []
+    sidebarPosts.value = posts.items || []
+  } catch { /* sidebar is decorative — ignore failures */ }
+})
 
 const url = computed(
   () => `${apiBase}/api/public/contents/${encodeURIComponent(slug.value)}?type=${encodeURIComponent(contentType.value)}`,
@@ -208,8 +255,59 @@ if (error.value) {
 .public-content-shell-flush .public-content {
   margin-top: 0;
 }
-.public-content-shell-flush > .public-content > .block-title:first-child {
+.public-content-shell-flush .public-content > .block-title:first-child {
   margin-top: 0;
+}
+
+/* ── Template layouts (basic·narrow·wide·sidebar·backend) ──────────────
+   basic/narrow keep the default 1200px shell + 880px reading column. */
+.tpl-wide,
+.tpl-sidebar {
+  max-width: var(--theme-content-max);
+  padding-left: var(--theme-pad-x);
+  padding-right: var(--theme-pad-x);
+}
+.tpl-backend {
+  max-width: none;
+  padding-left: var(--theme-pad-x);
+  padding-right: var(--theme-pad-x);
+}
+/* wide/sidebar/backend: content fills instead of the narrow reading column */
+.tpl-wide .public-content,
+.tpl-sidebar .public-content,
+.tpl-backend .public-content {
+  max-width: none;
+}
+/* sidebar: article + right column */
+.tpl-sidebar .public-content-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 48px;
+  align-items: start;
+}
+.public-content-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  position: sticky;
+  top: calc(var(--theme-topbar-h, 64px) + 24px);
+}
+.pcs-widget h3 {
+  margin: 0 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--theme-line);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--theme-fg-dim);
+}
+.pcs-widget ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pcs-widget a { color: var(--theme-fg); text-decoration: none; font-size: 14px; line-height: 1.4; }
+.pcs-widget a:hover { text-decoration: underline; }
+@media (max-width: 900px) {
+  .tpl-sidebar .public-content-main { grid-template-columns: 1fr; }
+  .public-content-sidebar { position: static; }
 }
 
 /* ── Hero ── */

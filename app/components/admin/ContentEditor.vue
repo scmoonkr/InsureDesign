@@ -142,6 +142,30 @@
           </div>
         </div>
 
+        <!-- 카테고리 글목록 (postList 블록) — 카테고리·갯수·열수 선택 후 삽입 -->
+        <div class="theme-form-field">
+          <span>카테고리 글목록</span>
+          <div class="theme-backend-posts-block-row">
+            <select v-model="postListCategory" style="min-width:140px" title="카테고리">
+              <option value="">전체 카테고리</option>
+              <option v-for="c in categoryRows" :key="c.id" :value="c.slug">
+                {{ '　'.repeat(c.depth) }}{{ c.name }}
+              </option>
+            </select>
+            <input v-model.number="postListLimit" type="number" min="1" max="24" style="width:64px" title="갯수" />
+            <select v-model="postListColumns" style="width:70px" title="열 수">
+              <option value="2">2열</option>
+              <option value="3">3열</option>
+              <option value="4">4열</option>
+            </select>
+            <button
+              type="button"
+              class="theme-form-submit theme-form-submit-secondary-soft"
+              @click="insertPostList"
+            >삽입</button>
+          </div>
+        </div>
+
         <!-- Categories (admin only — both posts and pages) — custom dropdown
              with chips so it reads like a regular single-line select but allows
              toggling multiple options. -->
@@ -175,9 +199,9 @@
           </select>
         </label>
 
-        <!-- PAGE: Template (admin only) -->
-        <label v-if="isPage && isAdmin" class="theme-form-field">
-          <span>Template</span>
+        <!-- Template (admin only) — posts·pages 공통 레이아웃 선택 -->
+        <label v-if="isAdmin" class="theme-form-field">
+          <span>Template (레이아웃)</span>
           <select v-model="form.template">
             <option v-for="t in TEMPLATE_OPTIONS" :key="t.value" :value="t.value">{{ t.label }}</option>
           </select>
@@ -456,10 +480,21 @@ const CUSTOM_BLOCK_OPTIONS = [
 ]
 
 const TEMPLATE_OPTIONS = [
-  { value: 'page-basic', label: 'Basic (기본)' },
-  { value: 'page-landing', label: 'Landing (랜딩)' },
-  { value: 'page-about', label: 'About (소개)' },
+  { value: 'basic',   label: 'Basic — 기본 글 (좁은 읽기 컬럼)' },
+  { value: 'narrow',  label: 'Narrow — 페이지 배너 + 좁은 컬럼' },
+  { value: 'wide',    label: 'Wide — 메뉴바 폭까지 넓게' },
+  { value: 'sidebar', label: 'Sidebar — 넓게 + 우측 사이드바' },
+  { value: 'backend', label: 'Backend — 풀블리드(전체 폭)' },
 ]
+// 구 값(page-basic/landing/about) → 신 값 매핑. 없으면 콘텐츠 타입 기본값.
+const TEMPLATE_ALIASES: Record<string, string> = {
+  'page-basic': 'narrow', 'page-landing': 'wide', 'page-about': 'sidebar',
+}
+function normalizeTemplate(v: string | undefined, isPageContent: boolean): string {
+  if (v && TEMPLATE_OPTIONS.some(t => t.value === v)) return v
+  if (v && TEMPLATE_ALIASES[v]) return TEMPLATE_ALIASES[v]
+  return isPageContent ? 'narrow' : 'basic'
+}
 
 const IMAGE_BLOCKS = new Set(['gallery', 'imageGrid', 'slide'])
 
@@ -554,6 +589,10 @@ const message = ref('')
 const customBlockToInsert = ref('')
 const customBlockAccess   = ref('public')
 const accessInsertLevel   = ref('member')
+// 카테고리 글목록(postList) 삽입용
+const postListCategory    = ref('')
+const postListLimit       = ref(6)
+const postListColumns     = ref('3')
 const markdownRef = ref<HTMLTextAreaElement | null>(null)
 const featuredFileRef = ref<HTMLInputElement | null>(null)
 const featuredUploading = ref(false)
@@ -585,7 +624,7 @@ const form = reactive({
   featured: false,
   // page-only
   parentId: '',
-  template: 'page-basic',
+  template: 'basic',
   showInMenu: false,
 })
 
@@ -800,6 +839,15 @@ function insertCustomBlock() {
 function insertAccess() {
   insertAtCursor(`access: ${accessInsertLevel.value}\n`)
 }
+// 선택한 카테고리/갯수/열수로 postList 블록을 삽입. 카테고리 미선택 = 전체 글.
+function insertPostList() {
+  const lines = [':::postList']
+  if (postListCategory.value) lines.push(`categories: ${postListCategory.value}`)
+  lines.push(`limit: ${Number(postListLimit.value) || 6}`)
+  lines.push(`columns: ${postListColumns.value}`)
+  lines.push(':::')
+  insertAtCursor(lines.join('\n'))
+}
 
 function insertRowLayout(layout: string) {
   const cols = layout.split('-').length
@@ -1005,7 +1053,7 @@ async function loadDetail() {
       form.featured = !!(c.meta?.featured)
     } else {
       form.parentId = c.meta?.parentId ? String(c.meta.parentId) : ''
-      form.template = c.meta?.template || 'page-basic'
+      form.template = normalizeTemplate(c.template || c.meta?.template, isPage.value)
       form.showInMenu = !!c.meta?.showInMenu
     }
   } catch {
@@ -1037,6 +1085,7 @@ function buildSaveBody(): Record<string, unknown> {
   if (isAdmin.value) {
     base.status = form.status
     base.accessLevel = form.accessLevel   // page/post role gate
+    base.template = form.template          // 레이아웃 (posts·pages 공통, 최상위 저장)
     base.categoryIds = form.categoryIds   // both posts and pages
     if (isPost.value) {
       base.featured = form.featured

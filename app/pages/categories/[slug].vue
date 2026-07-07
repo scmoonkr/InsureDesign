@@ -165,9 +165,10 @@ if (error.value) {
 
 <style scoped>
 .category-shell {
-  max-width: 1200px;
+  /* 상단 메뉴바(.theme-topbar-inner)와 동일한 폭·좌우패딩으로 정렬 */
+  max-width: var(--theme-content-max);
   margin: 0 auto;
-  padding: 40px 24px 80px;
+  padding: 40px var(--theme-pad-x) 80px;
 }
 
 /* ── Header ── */
@@ -366,7 +367,7 @@ if (error.value) {
 /* ── Mobile ── */
 @media (max-width: 720px) {
   .category-shell {
-    padding: 28px 18px 60px;
+    padding: 28px var(--theme-pad-x) 60px;
   }
   .category-head h1 {
     font-size: 28px;

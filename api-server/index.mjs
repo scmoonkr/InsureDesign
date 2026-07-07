@@ -626,6 +626,12 @@ async function handleListCategories(req, res, url) {
   sendJson(req, res, 200, { items })
 }
 
+// Public: flat category list for sidebars/widgets (no auth).
+async function handlePublicCategories(req, res) {
+  const items = (await listCategories()).map(c => ({ id: c.id, name: c.name, slug: c.slug }))
+  sendJson(req, res, 200, { items })
+}
+
 function validateCategoryName(name) {
   const trimmed = typeof name === 'string' ? name.trim() : ''
   if (!trimmed || trimmed.length > 60) return null
@@ -1820,6 +1826,9 @@ async function callOpenAiApi(messages, maxTokens = 16000, model) {
     model: model || openaiModel,
     max_completion_tokens: maxTokens,
     response_format: { type: 'json_object' },
+    // Lower temperature = more deterministic, far less prone to repetition-loop
+    // degeneration on long structured JSON.
+    temperature: 0.2,
     messages,
   })
   return new Promise((resolve, reject) => {
@@ -1930,60 +1939,65 @@ async function handleAnalyzeInsurance(req, res, id) {
   console.log(`[analyze] 프롬프트 로드: ${systemPrompt.length} chars | content 블록 ${content.length}개 (PDF ${content.length - 1} + text 1)`)
   console.log(`[analyze] → OpenAI 호출 (model=${openaiModel}, max_completion_tokens=16000) ...`)
 
-  let response
-  try {
-    response = await callOpenAiApi(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content },
-      ],
-      16000,
-    )
-  } catch (e) {
-    console.log(`[analyze] ✖ OpenAI 호출 실패: ${e.message}`)
-    throw e
-  }
-
-  const usage = response.usage || {}
-  const choice = response.choices?.[0] || {}
-  console.log(`[analyze] ← OpenAI 응답: finish_reason=${choice.finish_reason} usage(prompt=${usage.prompt_tokens} completion=${usage.completion_tokens})`)
-
-  const rawText = choice.message?.content || ''
-  console.log(`[analyze] 응답 텍스트 길이: ${rawText.length} chars`)
+  // LLM degeneration (repetition loops → raw strings/numbers inside `pages`,
+  // or token-limit truncation) is intermittent. Validate each response and
+  // auto-retry a couple times before giving up, so a single bad roll of the
+  // dice doesn't fail the whole request.
+  const MAX_ATTEMPTS = 2
   let analysisResult = null
-  try {
-    const m = rawText.match(/\{[\s\S]*\}/)
-    analysisResult = JSON.parse(m?.[0] || rawText)
-  } catch (e) {
-    console.log(`[analyze] ✖ JSON 파싱 실패: ${e.message} (raw 일부: ${rawText.slice(0, 120)}...)`)
+  let lastProblems = []
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let response
+    try {
+      response = await callOpenAiApi(
+        [{ role: 'system', content: systemPrompt }, { role: 'user', content }],
+        16000,
+      )
+    } catch (e) {
+      console.log(`[analyze] ✖ OpenAI 호출 실패(시도 ${attempt}/${MAX_ATTEMPTS}): ${e.message}`)
+      if (attempt === MAX_ATTEMPTS) throw e
+      continue
+    }
+
+    const usage = response.usage || {}
+    const choice = response.choices?.[0] || {}
+    const rawText = choice.message?.content || ''
+    console.log(`[analyze] ← 시도 ${attempt}: finish_reason=${choice.finish_reason} completion=${usage.completion_tokens} len=${rawText.length}`)
+
+    let parsed = null
+    try {
+      const m = rawText.match(/\{[\s\S]*\}/)
+      parsed = JSON.parse(m?.[0] || rawText)
+    } catch (e) {
+      console.log(`[analyze]   JSON 파싱 실패: ${e.message}`)
+    }
+
+    const problems = []
+    if (choice.finish_reason === 'length') problems.push('응답이 토큰 한도에서 잘림(finish_reason=length)')
+    if (!parsed || typeof parsed !== 'object') problems.push('JSON 파싱 실패')
+    else if (!Array.isArray(parsed.pages)) problems.push('pages 배열 없음')
+    else {
+      const badPages = parsed.pages.filter(p => !p || typeof p !== 'object' || Array.isArray(p)).length
+      const okPages = parsed.pages.length - badPages
+      if (badPages > 0) problems.push(`pages에 객체가 아닌 손상 항목 ${badPages}개`)
+      if (okPages < 3) problems.push(`유효 페이지 부족(${okPages}개)`)
+    }
+
+    if (problems.length === 0) {
+      analysisResult = parsed
+      console.log(`[analyze] ✔ 검증 통과(시도 ${attempt}): pages=${parsed.pages.length}`)
+      break
+    }
+    lastProblems = problems
+    console.log(`[analyze] ✖ 검증 실패(시도 ${attempt}/${MAX_ATTEMPTS}): ${problems.join(' / ')}${attempt < MAX_ATTEMPTS ? ' → 재시도' : ''}`)
   }
 
-  // Validate before storing. LLM degeneration (repetition loops, token-limit
-  // truncation) yields syntactically-valid-but-structurally-broken JSON — e.g.
-  // raw strings/numbers inside `pages`. Storing that crashes PDF generation
-  // later, so reject it here and ask the user to re-run instead.
-  const problems = []
-  if (choice.finish_reason === 'length') {
-    problems.push('응답이 토큰 한도에서 잘림(finish_reason=length)')
-  }
-  if (!analysisResult || typeof analysisResult !== 'object') {
-    problems.push('JSON 파싱 실패')
-  } else if (!Array.isArray(analysisResult.pages)) {
-    problems.push('pages 배열 없음')
-  } else {
-    const badPages = analysisResult.pages.filter(p => !p || typeof p !== 'object' || Array.isArray(p)).length
-    const okPages = analysisResult.pages.length - badPages
-    if (badPages > 0) problems.push(`pages에 객체가 아닌 손상 항목 ${badPages}개`)
-    if (okPages < 3) problems.push(`유효 페이지 부족(${okPages}개)`)
-  }
-
-  if (problems.length) {
-    console.log(`[analyze] ✖ 검증 실패 → 저장 안 함: ${problems.join(' / ')}`)
-    sendError(req, res, 502, `LLM 분석 결과가 손상되었습니다 (${problems.join(', ')}). 다시 시도해주세요.`)
+  if (!analysisResult) {
+    sendError(req, res, 502, `LLM 분석 결과가 손상되었습니다 (${lastProblems.join(', ')}). ${MAX_ATTEMPTS}회 시도 실패 — 잠시 후 다시 시도해 주세요.`)
     return
   }
 
-  console.log(`[analyze] ✔ 검증 통과: top-keys=[${Object.keys(analysisResult).join(', ')}] pages=${analysisResult.pages.length}`)
   await updateAnalysisDoc(id, { analysisResult })
   console.log(`[analyze] ✅ 저장 완료 id=${id} (${Date.now() - t0}ms)`)
   sendJson(req, res, 200, { ok: true, analysisResult })
@@ -2205,6 +2219,11 @@ async function handleRequest(req, res) {
 
     if (req.method === 'GET' && url.pathname === '/api/public/post-cards') {
       await handlePublicPostCards(req, res, url)
+      return
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/public/categories') {
+      await handlePublicCategories(req, res)
       return
     }
 
