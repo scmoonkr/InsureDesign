@@ -228,7 +228,8 @@ const bannerTextColor = computed<string>(() => {
 // ── SEO (page/post) ──────────────────────────────────────────────────────────
 const siteName = useSiteName()
 const siteDesc = useSiteDescription()
-const siteUrl = computed(() => String(useRuntimeConfig().public.siteUrl || '').replace(/\/$/, ''))
+const _runtime = useRuntimeConfig()
+const siteUrl = computed(() => String(_runtime.public.siteUrl || '').replace(/\/$/, ''))
 
 // Rewrite media/localhost origins onto the public site URL so crawlers get a
 // reachable absolute image. External (cloud) URLs are kept as-is.
