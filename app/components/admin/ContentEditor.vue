@@ -305,9 +305,14 @@
             <label v-if="form.showEyebrow" class="theme-form-field">
               <span>배너 글자색</span>
               <select v-model="form.bannerTextColor">
-                <option value="auto">자동 (이미지 있으면 흰색)</option>
-                <option value="light">흰색</option>
-                <option value="dark">검정</option>
+                <option value="primary">Primary</option>
+                <option value="primary-soft">Primary Soft</option>
+                <option value="secondary">Secondary</option>
+                <option value="secondary-soft">Secondary Soft</option>
+                <option value="white">White</option>
+                <option value="success">Success</option>
+                <option value="warning">Warning</option>
+                <option value="error">Error</option>
               </select>
             </label>
           </div>
@@ -627,7 +632,7 @@ const form = reactive({
   thumbnailImageId: '',
   // shared meta — show the eyebrow line (categories / contentType label) above the title
   showEyebrow: true,
-  bannerTextColor: 'auto',
+  bannerTextColor: 'white',
   // post-only
   categoryIds: [] as string[],
   tagNamesInput: '',
@@ -1049,7 +1054,11 @@ async function loadDetail() {
     // showEyebrow defaults to true when meta is missing the field (preserves
     // existing posts' eyebrow visibility before this toggle existed).
     form.showEyebrow = c.meta?.showEyebrow !== false
-    form.bannerTextColor = c.meta?.bannerTextColor || 'auto'
+    // Map legacy values (auto/light/dark) onto the themed palette so old content
+    // still shows a valid option.
+    const BANNER_TC = ['primary', 'primary-soft', 'secondary', 'secondary-soft', 'white', 'success', 'warning', 'error']
+    const btc = c.meta?.bannerTextColor
+    form.bannerTextColor = (btc && BANNER_TC.includes(btc)) ? btc : (btc === 'dark' ? 'primary' : 'white')
 
     if (isPost.value) {
       let tagNames: string[]

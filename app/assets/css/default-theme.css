@@ -1714,6 +1714,17 @@
 }
 .block-title-text-light .block-title-subtitle { opacity: 0.92; }
 
+/* Page banner themed text colors (meta.bannerTextColor). White keeps a shadow so
+   it stays readable over background images. */
+.block-title-tc-primary        { color: var(--theme-primary); }
+.block-title-tc-primary-soft   { color: var(--theme-primary-soft); }
+.block-title-tc-secondary      { color: var(--theme-secondary); }
+.block-title-tc-secondary-soft { color: var(--theme-secondary-soft); }
+.block-title-tc-white          { color: #fff; text-shadow: 0 1px 12px rgba(0, 0, 0, 0.35); }
+.block-title-tc-success        { color: var(--theme-success); }
+.block-title-tc-warning        { color: var(--theme-warning); }
+.block-title-tc-error          { color: var(--theme-error); }
+
 @media (max-width: 720px) {
   .block-title-title { font-size: 24px; }
   .block-title-height-large  .block-title-inner { min-height: 320px; }

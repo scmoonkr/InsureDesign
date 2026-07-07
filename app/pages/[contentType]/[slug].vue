@@ -20,7 +20,7 @@
               'public-content-page-banner',
               'block-title-align-center',
               'block-title-height-medium',
-              `block-title-text-${bannerTextColor}`,
+              `block-title-tc-${bannerTextColor}`,
             ]"
             :style="pageBannerStyle"
           >
@@ -212,14 +212,16 @@ const pageBannerStyle = computed(() => {
   return s
 })
 
-// Banner title/subtitle color. Author picks in the editor (meta.bannerTextColor):
-//   'light' → white, 'dark' → black. 'auto' (or missing) keeps the old behavior
-//   (white when there's a background image, black otherwise) — but a light image
-//   makes white unreadable, hence the manual override.
-const bannerTextColor = computed<'light' | 'dark'>(() => {
+// Banner title/subtitle color from the themed palette (meta.bannerTextColor):
+//   primary | primary-soft | secondary | secondary-soft | white | success | warning | error
+// Legacy values map on: light→white, dark→primary, auto/missing→white-on-image else primary.
+const BANNER_TC = ['primary', 'primary-soft', 'secondary', 'secondary-soft', 'white', 'success', 'warning', 'error']
+const bannerTextColor = computed<string>(() => {
   const c = content.value?.meta?.bannerTextColor
-  if (c === 'light' || c === 'dark') return c
-  return heroUrl.value ? 'light' : 'dark'
+  if (typeof c === 'string' && BANNER_TC.includes(c)) return c
+  if (c === 'light') return 'white'
+  if (c === 'dark') return 'primary'
+  return heroUrl.value ? 'white' : 'primary'
 })
 
 
