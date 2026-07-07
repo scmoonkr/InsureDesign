@@ -94,10 +94,14 @@ const url = computed(() => {
   return `${apiBase}/api/public/post-cards?${p}`
 })
 
+// Key must be STABLE across SSR and client — do NOT include apiBase (it differs:
+// server uses the internal localhost origin, browser uses same-origin "").
+// A url-based key mismatches on hydration, drops the SSR payload, and flashes the
+// empty state. Watch the block params (not url) so an apiBase-only change doesn't refetch.
 const { data, pending } = useFetch<{ items: Post[] }>(url, {
-  key: () => `postlist:${url.value}`,
+  key: () => `postlist:${categories.value}|${tags.value}|${limit.value}`,
   default: () => ({ items: [] }),
-  watch: [url],
+  watch: [categories, tags, limit],
 })
 
 const posts = computed<Post[]>(() => data.value?.items ?? [])
