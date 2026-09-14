@@ -50,6 +50,9 @@ export async function createAnalysisDoc(data) {
     existingInsurancePdf: data.existingInsurancePdf || null,
     proposalPdfs: Array.isArray(data.proposalPdfs) ? data.proposalPdfs.slice(0, 4) : [],
     note: data.note || '',
+    // PDF -> 표준 JSON 추출 결과 (docs/convert_pdf_json.md)
+    existing: null,   // 기존보험내역 PDF 1개의 표준 JSON
+    proposal: [],     // 보험설계서 PDF들의 표준 JSON 배열
     analysisResult: null,
     proposalData: null,
     createdAt: now,
@@ -63,7 +66,8 @@ export async function updateAnalysisDoc(id, data) {
   const c = await col()
   const set = { updatedAt: new Date() }
   const allowed = ['title', 'customerName', 'contractorName', 'insuredAge', 'agentName',
-    'existingInsurancePdf', 'proposalPdfs', 'note', 'analysisResult', 'proposalData', 'pdfPath']
+    'existingInsurancePdf', 'proposalPdfs', 'note', 'existing', 'proposal',
+    'analysisResult', 'proposalData', 'pdfPath']
   for (const f of allowed) {
     if (data[f] !== undefined) set[f] = data[f]
   }

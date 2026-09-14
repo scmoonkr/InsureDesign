@@ -142,7 +142,19 @@
 
           <!-- 보험설계서 PDF (최대 4개) -->
           <div class="ia-section">
-            <div class="ia-section-title">보험설계서 <span class="theme-meta">(최대 4개)</span></div>
+            <div class="ia-section-title ia-section-title-row">
+              <span>보험설계서 <span class="theme-meta">(최대 4개)</span></span>
+              <button
+                v-if="!isNewMode"
+                type="button"
+                class="ia-pdf-btn"
+                :disabled="isBusy || uploadingSlot !== null"
+                @click="extractPdfs"
+              >{{ isBusy && busyAction === 'extract' ? '변환 중...' : 'PDF변환' }}</button>
+            </div>
+            <p v-if="!isNewMode" class="theme-meta ia-extract-status">
+              기존보험: {{ extractedExisting ? '변환됨 ✓' : '—' }} · 설계서: {{ extractedProposalCount }}건 변환됨
+            </p>
             <div class="ia-pdf-list">
               <div v-for="idx in 4" :key="idx" class="ia-pdf-slot">
                 <span class="ia-pdf-num">{{ idx }}</span>
@@ -339,6 +351,10 @@ const form = ref<FormState>({
 const analysisText = ref('')
 const analysisJsonError = ref('')
 
+// PDF -> 표준 JSON 추출 상태 (existing / proposal)
+const extractedExisting = ref(false)
+const extractedProposalCount = ref(0)
+
 function blankForm(): FormState {
   return {
     title: '',
@@ -359,6 +375,8 @@ function openNew() {
   form.value = blankForm()
   analysisText.value = ''
   analysisJsonError.value = ''
+  extractedExisting.value = false
+  extractedProposalCount.value = 0
   drawerId.value = ''
   isNewMode.value = true
   drawerOpen.value = true
@@ -383,16 +401,19 @@ async function openEdit(row: AnalysisItem) {
   }
   analysisText.value = ''
   analysisJsonError.value = ''
+  extractedExisting.value = false
+  extractedProposalCount.value = 0
   drawerId.value = row.id
   isNewMode.value = false
   drawerOpen.value = true
   statusMsg.value = ''
 
-  // analysisResult / proposalData는 리스트에서 제외되므로 전체 레코드 fetch
+  // analysisResult / proposalData / existing / proposal은 리스트에서 제외되므로 전체 레코드 fetch
   try {
-    const res = await $fetch<{ item: AnalysisItem }>(`${apiBase}/api/analysis/${row.id}`, {
-      credentials: 'include',
-    })
+    const res = await $fetch<{ item: AnalysisItem & { existing?: unknown; proposal?: unknown[] } }>(
+      `${apiBase}/api/analysis/${row.id}`,
+      { credentials: 'include' },
+    )
     if (res?.item) {
       form.value.analysisResult = res.item.analysisResult ?? null
       form.value.proposalData = res.item.proposalData ?? null
@@ -400,6 +421,8 @@ async function openEdit(row: AnalysisItem) {
       analysisText.value = form.value.analysisResult
         ? JSON.stringify(form.value.analysisResult, null, 2)
         : ''
+      extractedExisting.value = !!res.item.existing
+      extractedProposalCount.value = Array.isArray(res.item.proposal) ? res.item.proposal.length : 0
     }
   } catch { /* 실패해도 drawer는 유지 */ }
 }
@@ -587,7 +610,40 @@ async function deleteRecord() {
   }
 }
 
+// 업로드된 기존보험내역/보험설계서 PDF를 서버에서 표준 JSON으로 변환하여
+// doc.existing / doc.proposal 에 저장한다. (Python pdfplumber 워커)
+async function extractPdfs() {
+  if (isNewMode.value) return
+  isBusy.value = true
+  busyAction.value = 'extract'
+  statusMsg.value = ''
+  isError.value = false
+  try {
+    const res = await $fetch<{ ok: boolean; existingExtracted: boolean; proposalCount: number }>(
+      `${apiBase}/api/analysis/${drawerId.value}/extract`,
+      { method: 'POST', credentials: 'include' },
+    )
+    extractedExisting.value = !!res.existingExtracted
+    extractedProposalCount.value = res.proposalCount || 0
+    await refresh()
+    statusMsg.value = `PDF 변환 완료 (기존 ${res.existingExtracted ? 1 : 0}건 · 설계서 ${res.proposalCount || 0}건)`
+  } catch (err: unknown) {
+    isError.value = true
+    statusMsg.value = err instanceof Error ? err.message : 'PDF 변환 실패'
+  } finally {
+    isBusy.value = false
+    busyAction.value = ''
+  }
+}
+
 async function analyzeRecord() {
+  // 분석은 "PDF변환"으로 생성된 표준 JSON(existing·proposal)을 입력으로 사용.
+  // 둘 다 없으면 먼저 PDF변환을 하도록 안내(서버에서도 동일하게 막지만 즉시 피드백).
+  if (!extractedExisting.value && extractedProposalCount.value === 0) {
+    isError.value = true
+    statusMsg.value = '먼저 "PDF변환"을 실행하세요. 분석에 필요한 표준 JSON(기존보험·보험설계서)이 없습니다.'
+    return
+  }
   isBusy.value = true
   busyAction.value = 'analyze'
   statusMsg.value = ''
@@ -609,7 +665,9 @@ async function analyzeRecord() {
     console.log('[analyze] ✅ 완료 — analysisResult 저장됨')
   } catch (err: unknown) {
     isError.value = true
-    statusMsg.value = err instanceof Error ? err.message : '분석 실패'
+    // 서버가 보낸 메시지({ error })를 우선 표시 (ofetch는 응답 본문을 err.data 에 담음)
+    const serverMsg = (err as { data?: { error?: string } })?.data?.error
+    statusMsg.value = serverMsg || (err instanceof Error ? err.message : '분석 실패')
     console.error(`[analyze] ✖ 실패 (${Date.now() - t0}ms)`, err)
   } finally {
     isBusy.value = false
@@ -677,6 +735,16 @@ function formatDate(iso?: string) {
 }
 
 .ia-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.ia-section-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.ia-section-title-row .ia-pdf-btn { text-transform: none; letter-spacing: normal; }
+
+.ia-extract-status { margin: 0; }
 
 .ia-pdf-list { display: flex; flex-direction: column; gap: 8px; }
 

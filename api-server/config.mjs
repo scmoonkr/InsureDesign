@@ -95,6 +95,8 @@ export function getConfig() {
     anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
     openaiApiKey: process.env.OPENAI_API_KEY || '',
     openaiModel: process.env.OPENAI_MODEL || 'gpt-4o',
+    // 보험 PDF -> 표준 JSON 워커 실행에 쓰는 Python 실행 파일. 미설정 시 'python'.
+    pythonPath: process.env.PYTHON_PATH || 'python',
     // TEMP(dev): when 'true', skip login/role checks for backend access. Never set on production.
     authBypass: process.env.AUTH_BYPASS === 'true',
   }

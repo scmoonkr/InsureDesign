@@ -1,0 +1,3 @@
+# 보험 PDF -> 표준 JSON 워커 의존성
+# 설치: python -m pip install -r api-server/workers/requirements.txt
+pdfplumber>=0.11

@@ -19,6 +19,8 @@ import { listTags, findOrCreateTagsByNames, getTagBySlug, getTagsByIds } from '.
 import { listMenus, createMenu, updateMenu, deleteMenu } from './menus-service.mjs'
 import { listAnalysisDocs, getAnalysisDoc, createAnalysisDoc, updateAnalysisDoc, deleteAnalysisDoc } from './analysis-service.mjs'
 import { buildProposalData, generatePdf } from './pdf-service.mjs'
+import { extractPdfToJson } from './proposal-extract.mjs'
+import { buildSchemaGapEntry, appendSchemaGapEntries } from './schema-gap-log.mjs'
 
 loadEnv()
 
@@ -1883,6 +1885,29 @@ function buildAgeSegmentText(insuredAge) {
     + `- 생애주기 유형: ${seg}  ← 필수: customer.segment="${seg}" 명시하고, issueList·title·pillars 등 모든 유형별 콘텐츠를 반드시 ${seg} 유형 규칙으로만 생성 (다른 유형 템플릿 사용 금지)\n`
 }
 
+// LLM 입력용으로 표준 JSON을 슬림화. raw(페이지 전체 텍스트/표)와 내부 필드
+// (_sourceUrlPath 등)는 토큰 절약을 위해 제외하고, 분석에 필요한 구조만 남긴다.
+// (docs/convert_pdf_json.md "LLM 분석 단계" 권장 입력 형태)
+function slimForLlm(extraction) {
+  if (!extraction || typeof extraction !== 'object') return extraction
+  const ext = extraction.extraction
+  return {
+    schema_version: extraction.schema_version,
+    document: extraction.document,
+    insurer: extraction.insurer,
+    product: extraction.product,
+    proposal: extraction.proposal,
+    parties: extraction.parties,
+    advisor: extraction.advisor,
+    premium_summary: extraction.premium_summary,
+    coverages: extraction.coverages,
+    refund_schedule: extraction.refund_schedule,
+    analysis: extraction.analysis,
+    notices: extraction.notices,
+    extraction: ext ? { tool: ext.tool, schema_gap_summary: ext.schema_gap_summary } : undefined,
+  }
+}
+
 async function handleAnalyzeInsurance(req, res, id) {
   const t0 = Date.now()
   console.log(`\n[analyze] ▶ 시작 id=${id}`)
@@ -1890,53 +1915,38 @@ async function handleAnalyzeInsurance(req, res, id) {
   if (!session) return
   const doc = await getAnalysisDoc(id)
   if (!doc) { console.log('[analyze] ✖ 문서 없음'); sendError(req, res, 404, 'Not found'); return }
-  console.log(`[analyze] 문서 로드: 고객='${doc.customerName || ''}' 설계사='${doc.agentName || ''}' 기존PDF=${doc.existingInsurancePdf ? 'Y' : 'N'} 설계PDF=${(doc.proposalPdfs || []).filter(Boolean).length}개`)
-  const { uploadDir } = getConfig()
+  // PDF 원본이 아니라 "PDF변환"으로 생성된 표준 JSON(existing·proposal)을 LLM 입력으로 사용.
+  const hasExisting = !!doc.existing
+  const proposalList = Array.isArray(doc.proposal) ? doc.proposal.filter(Boolean) : []
+  const hasProposal = proposalList.length > 0
+  console.log(`[analyze] 문서 로드: 고객='${doc.customerName || ''}' 설계사='${doc.agentName || ''}' existing=${hasExisting ? 'Y' : 'N'} proposal=${proposalList.length}건`)
 
-  const content = []
-
-  async function addPdf(pdfInfo, title) {
-    if (!pdfInfo?.urlPath) return
-    try {
-      const data = await readFile(urlPathToFilePath(pdfInfo.urlPath, uploadDir))
-      content.push({
-        type: 'file',
-        file: {
-          filename: pdfInfo.originalName || `${title}.pdf`,
-          file_data: `data:application/pdf;base64,${data.toString('base64')}`,
-        },
-      })
-      console.log(`[analyze]   + PDF 첨부: '${title}' (${(data.length / 1024).toFixed(0)} KB)`)
-    } catch (e) {
-      console.log(`[analyze]   ! PDF 읽기 실패(skip): '${title}' ${pdfInfo.urlPath} — ${e.message}`)
-    }
+  // 기존/설계서 표준 JSON이 둘 다 없으면 먼저 PDF변환을 하도록 안내.
+  if (!hasExisting && !hasProposal) {
+    console.log('[analyze] ✖ existing/proposal 없음 → 400 (PDF변환 안내)')
+    sendError(req, res, 400, '먼저 "PDF변환"을 실행하세요. 분석에 필요한 표준 JSON(기존보험·보험설계서)이 없습니다.')
+    return
   }
 
-  await addPdf(doc.existingInsurancePdf, '기존보험내역')
-  for (let i = 0; i < (doc.proposalPdfs || []).length; i++) {
-    await addPdf(doc.proposalPdfs[i], `보험설계서 ${i + 1}: ${doc.proposalPdfs[i]?.originalName || ''}`)
-  }
+  const existingJson = hasExisting ? slimForLlm(doc.existing) : null
+  const proposalJson = proposalList.map(slimForLlm)
 
-  if (content.length === 0) {
-    console.log('[analyze] ✖ 첨부된 PDF 없음 → 400')
-    sendError(req, res, 400, '분석할 PDF 파일이 없습니다'); return
-  }
+  const content =
+    `보험 설계 화면의 입력 정보 (JSON과 다를 경우 아래 입력값을 우선 적용):\n`
+    + `- 피보험자: ${doc.customerName || ''}\n`
+    + `- 보험계약자: ${doc.contractorName || ''}\n`
+    + `- 설계사명: ${doc.agentName || ''}\n`
+    + `- 설계 note: ${doc.note || ''}\n`
+    + buildAgeSegmentText(doc.insuredAge)
+    + `\n[기존 보험내역 표준 JSON]\n${existingJson ? JSON.stringify(existingJson) : '(없음)'}\n`
+    + `\n[보험설계서 표준 JSON 목록 (${proposalJson.length}건)]\n${proposalJson.length ? JSON.stringify(proposalJson) : '(없음)'}\n`
+    + `\n위 표준 JSON(기존 보험내역·보험설계서)을 시스템 프롬프트의 규칙에 따라 분석하여, 설명 없이 순수 JSON만 생성하세요.`
 
-  content.push({
-    type: 'text',
-    text: `보험 설계 화면의 입력 정보 (PDF와 다를 경우 아래 입력값을 우선 적용):\n`
-      + `- 피보험자: ${doc.customerName || ''}\n`
-      + `- 보험계약자: ${doc.contractorName || ''}\n`
-      + `- 설계사명: ${doc.agentName || ''}\n`
-      + `- 설계 note: ${doc.note || ''}\n`
-      + buildAgeSegmentText(doc.insuredAge)
-      + `\n위 기존 보험내역 및 보험설계서 PDF를 시스템 프롬프트의 규칙에 따라 분석하여, 설명 없이 순수 JSON만 생성하세요.`,
-  })
   console.log(`[analyze] 입력: 피보험자='${doc.customerName || ''}' 계약자='${doc.contractorName || ''}' 나이=${doc.insuredAge ?? '(미입력)'} 유형=${ageToSegment(doc.insuredAge) ?? '-'}`)
 
   const systemPrompt = await loadAnalysisPrompt()
   const { openaiModel } = getConfig()
-  console.log(`[analyze] 프롬프트 로드: ${systemPrompt.length} chars | content 블록 ${content.length}개 (PDF ${content.length - 1} + text 1)`)
+  console.log(`[analyze] 프롬프트 로드: ${systemPrompt.length} chars | user JSON ${content.length} chars (existing ${existingJson ? 'Y' : 'N'}, proposal ${proposalJson.length}건)`)
   console.log(`[analyze] → OpenAI 호출 (model=${openaiModel}, max_completion_tokens=16000) ...`)
 
   // LLM degeneration (repetition loops → raw strings/numbers inside `pages`,
@@ -2091,6 +2101,82 @@ async function handleGeneratePdf(req, res, id) {
 
   await updateAnalysisDoc(id, { pdfPath: pdfResult.urlPath })
   sendJson(req, res, 200, { ok: true, pdfPath: pdfResult.urlPath })
+}
+
+// 업로드된 기존보험내역/보험설계서 PDF를 Python 워커로 표준 JSON 변환하여
+//   기존보험내역 -> doc.existing (객체)
+//   보험설계서   -> doc.proposal (표준 JSON 배열, 슬롯 순서)
+// 로 저장한다. (docs/convert_pdf_json.md)
+// 멱등성: 각 추출본에 _sourceUrlPath 를 심어, PDF 참조가 그대로면 재추출하지 않는다.
+async function handleExtractPdf(req, res, id) {
+  const t0 = Date.now()
+  console.log(`\n[extract] ▶ 시작 id=${id}`)
+  const session = await checkAdmin(req, res)
+  if (!session) return
+
+  const doc = await getAnalysisDoc(id)
+  if (!doc) { sendError(req, res, 404, 'Not found'); return }
+
+  const { uploadDir } = getConfig()
+  const prevExisting = doc.existing || null
+  const prevProposal = Array.isArray(doc.proposal) ? doc.proposal : []
+
+  // 표준 포맷에 없는 라벨/표 등 gap 을 모아 이번 변환분만 로그로 남긴다(추후 처리용).
+  const gapEntries = []
+  const nowIso = new Date().toISOString()
+
+  // 이전 추출본을 urlPath 기준으로 재사용하기 위한 헬퍼. slot 은 로그 추적용.
+  async function convert(pdfInfo, reusePool, slot, label) {
+    if (!pdfInfo?.urlPath) return null
+    const cached = reusePool.find(x => x && x._sourceUrlPath === pdfInfo.urlPath)
+    if (cached) {
+      console.log(`[extract]   = 재사용(변경없음): ${label} ${pdfInfo.originalName || ''}`)
+      return cached
+    }
+    const absPath = urlPathToFilePath(pdfInfo.urlPath, uploadDir)
+    console.log(`[extract]   + 변환: ${label} ${pdfInfo.originalName || ''}`)
+    const json = await extractPdfToJson(absPath)
+
+    // 표준 스키마에 없는 라벨(용어) 등 gap 상세를 로그 엔트리로 수집.
+    const entry = buildSchemaGapEntry(json, {
+      docId: id, slot, sourceUrlPath: pdfInfo.urlPath, originalName: pdfInfo.originalName || null,
+    })
+    if (entry) gapEntries.push(entry)
+
+    // gap 상세는 로그 파일에만 남기고, DB 문서에는 요약(schema_gap_summary)만 유지해 비대화를 막는다.
+    if (json.extraction) delete json.extraction.schema_gap
+
+    return { ...json, _sourceUrlPath: pdfInfo.urlPath, _originalName: pdfInfo.originalName || null }
+  }
+
+  try {
+    const existing = await convert(doc.existingInsurancePdf, prevExisting ? [prevExisting] : [], 'existing', '기존보험내역')
+
+    const proposalPdfs = (doc.proposalPdfs || []).filter(Boolean)
+    const proposal = []
+    for (let i = 0; i < proposalPdfs.length; i++) {
+      const item = await convert(proposalPdfs[i], prevProposal, `proposal[${i}]`, `보험설계서 ${i + 1}`)
+      if (item) proposal.push(item)
+    }
+
+    await updateAnalysisDoc(id, { existing, proposal })
+
+    // 이번에 새로 변환된 건들의 gap 을 로그로 영속화.
+    const gapResult = await appendSchemaGapEntries(gapEntries, nowIso)
+
+    console.log(`[extract] ✅ 저장 완료 id=${id} existing=${existing ? 'Y' : 'N'} proposal=${proposal.length}개 gap로그=${gapResult.logged}건 (${Date.now() - t0}ms)`)
+    sendJson(req, res, 200, {
+      ok: true,
+      existing,
+      proposal,
+      existingExtracted: !!existing,
+      proposalCount: proposal.length,
+      schemaGapLogged: gapResult.logged,
+    })
+  } catch (err) {
+    console.error(`[extract] ✖ 실패 id=${id}: ${err instanceof Error ? err.message : String(err)}`)
+    sendError(req, res, 500, `PDF 변환 실패: ${err instanceof Error ? err.message : String(err)}`)
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -2338,9 +2424,10 @@ async function handleRequest(req, res) {
       if (req.method === 'PUT') { await handleUpdateAnalysis(req, res, analysisIdMatch[1]); return }
       if (req.method === 'DELETE') { await handleDeleteAnalysis(req, res, analysisIdMatch[1]); return }
     }
-    const analysisActionMatch = url.pathname.match(/^\/api\/analysis\/([^/]+)\/(analyze|generate|generate-pdf)$/)
+    const analysisActionMatch = url.pathname.match(/^\/api\/analysis\/([^/]+)\/(extract|analyze|generate|generate-pdf)$/)
     if (analysisActionMatch && req.method === 'POST') {
       const [, id, action] = analysisActionMatch
+      if (action === 'extract')       { await handleExtractPdf(req, res, id);        return }
       if (action === 'analyze')       { await handleAnalyzeInsurance(req, res, id);  return }
       if (action === 'generate')      { await handleGenerateProposal(req, res, id);  return }
       if (action === 'generate-pdf')  { await handleGeneratePdf(req, res, id);       return }
