@@ -337,8 +337,8 @@
 .t-sectionCover .head-meta .doc-title { color: rgba(251,247,238,.7); }
 .t-sectionCover .seal { background: var(--ivory); color: var(--seal); }
 .t-sectionCover .body { display: grid; grid-template-rows: minmax(0,1fr) auto; align-items: center; min-height: 0; }
-.t-sectionCover .cover-wrap { display: grid; grid-template-columns: 50% 1fr; gap: 12mm; align-items: center; padding: 4mm 0 10mm; }
-.t-sectionCover .cover-title { font-family: var(--f-serif); font-weight: 600; font-size: 40pt; line-height: 1.15; letter-spacing: -.018em; color: var(--ivory); margin: 0; }
+.t-sectionCover .cover-wrap { display: grid; grid-template-columns: 54% 1fr; gap: 12mm; align-items: center; padding: 4mm 0 10mm; }
+.t-sectionCover .cover-title { font-family: var(--f-serif); font-weight: 600; font-size: 35pt; line-height: 1.2; letter-spacing: -.02em; color: var(--ivory); margin: 0; word-break: keep-all; }
 .t-sectionCover .cover-side { border-left: 0.6pt solid rgba(251,247,238,.3); padding-left: 9mm; display: flex; flex-direction: column; gap: 6mm; }
 .t-sectionCover .cover-desc { font-size: 12pt; line-height: 1.7; color: rgba(251,247,238,.85); font-family: var(--f-serif); font-weight: 400; }
 .t-sectionCover .cover-side .meta-grid { display: grid; grid-template-columns: auto 1fr; row-gap: 6px; column-gap: 14px; font-size: 9.5pt; letter-spacing: .04em; }
