@@ -1992,6 +1992,16 @@ async function handleAnalyzeInsurance(req, res, id) {
       const okPages = parsed.pages.length - badPages
       if (badPages > 0) problems.push(`pages에 객체가 아닌 손상 항목 ${badPages}개`)
       if (okPages < 3) problems.push(`유효 페이지 부족(${okPages}개)`)
+
+      // 구조는 유효하지만 스키마 자리표시자를 실제 내용으로 치환하지 않은 경우 감지.
+      // (기존보험 없음(existing=null)일 때 LLM이 기존보험 분석/문제점 페이지를 스켈레톤으로
+      //  남기는 사례. 프롬프트에서 해당 페이지 생략을 지시하지만, 방어적으로 재시도를 유도.)
+      const rawJson = JSON.stringify(parsed)
+      const ph = ['핵심진단1줄', '핵심진단2줄', '긍정요소 1문장', '부족영역 2문장', '강조키워드', '핵심결론']
+        .filter(t => rawJson.includes(t))
+      if (rawJson.includes('"설명"')) ph.push('설명')       // 값이 정확히 "설명" 인 자리표시자
+      if (/:\s*"\{[^"]*\}"/.test(rawJson)) ph.push('{중괄호토큰}') // 값이 {토큰} 형태로 남음
+      if (ph.length) problems.push(`자리표시자 미치환(${ph.join(', ')})`)
     }
 
     if (problems.length === 0) {

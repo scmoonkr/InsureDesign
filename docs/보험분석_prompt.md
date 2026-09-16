@@ -90,9 +90,22 @@ detail순서: 1→先  2→通  3→恒  4→網
 
 ## STEP 5. 페이지별 생성 규칙
 
+**⚠️ 기존보험 유무 분기 (페이지 생성 전 최우선 판단):**
+```
+[기존 보험내역 표준 JSON] 값이 "(없음)" 이면:
+  → page 3(existingAnalysis)·page 4(issueList)를 아예 생성하지 말 것.
+  → pages 배열은 page 5(sectionCover)부터 시작. (page 3·4 자리를 비워두거나 자리표시자로 채우지 말 것)
+  → 이때 6번(missionStatement)·7번(riskIceberg) 이후는 "신규 준비" 관점으로 자연스럽게 작성
+    (기존보험을 전제로 한 "분산/중복/갱신형과다" 등 진단 표현 사용 금지).
+[기존 보험내역 표준 JSON] 값이 실제 데이터이면:
+  → page 3·4를 아래 규칙대로 정상 생성.
+※ pagination·footer.pageNumber·totalPages 는 렌더러가 배열 순서로 재계산하므로,
+   페이지를 생략해도 뒤 페이지 번호를 억지로 당길 필요 없음. 있는 페이지만 순서대로 두면 됨.
+```
+
 ---
 
-### [3] page-existing-analysis `type:"existingAnalysis"`
+### [3] page-existing-analysis `type:"existingAnalysis"`  *(기존보험 있을 때만 생성)*
 
 ```json
 {
@@ -120,7 +133,7 @@ detail순서: 1→先  2→通  3→恒  4→網
 
 ---
 
-### [4] page-existing-problems `type:"issueList"`
+### [4] page-existing-problems `type:"issueList"`  *(기존보험 있을 때만 생성)*
 
 issues 6개 고정. 각 item: `{num, heading, body, tags[2~3개]}`.
 
@@ -398,11 +411,15 @@ G→["수천만 원의 치료비","기약 없는 장기 간병 부담","자녀�
 ❌ JSON 객체(1개) 외 어떤 것도 출력 금지 — 응답은 `{`로 시작해 `}`로 끝남
 ❌ pages 배열 원소는 페이지 "객체"만 — 문자열·숫자·목록을 배열에 넣지 말 것
 ❌ 완성된 JSON 뒤에 nullFieldsList·요약·설명 등 어떤 텍스트도 덧붙이지 말 것
+❌ 스키마의 자리표시자 토큰을 그대로 출력 금지 — 중괄호 토큰({설명}, {핵심진단1줄} 등)은 물론,
+   중괄호를 뗀 문자열("설명", "핵심진단1줄", "긍정요소 1문장", "핵심결론", "강조키워드" 등)도
+   실제 분석 내용으로 반드시 치환할 것. 채울 근거가 없으면 그 페이지 자체를 생성하지 말 것.
 ```
 
 **자가 검증 (출력 전 확인):**
 ```
-□ pageNo 3~15 순서 완전한가?
+□ pageNo 순서가 연속인가? (기존보험 있으면 3~15, 없으면 3·4 생략 후 5~15)
+□ 자리표시자("설명"·"핵심진단1줄"·"{...}" 등)가 하나도 남아있지 않은가?
 □ 모든 footer.pageNumber = 해당 pageNo?
 □ premium.monthly 합계 = page-closing balance.left.detail.amount?
 □ pieces·matrix·detail 페이지의 보험사명 일치하는가?
