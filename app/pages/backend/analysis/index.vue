@@ -142,16 +142,7 @@
 
           <!-- 보험설계서 PDF (최대 4개) -->
           <div class="ia-section">
-            <div class="ia-section-title ia-section-title-row">
-              <span>보험설계서 <span class="theme-meta">(최대 4개)</span></span>
-              <button
-                v-if="!isNewMode"
-                type="button"
-                class="ia-pdf-btn"
-                :disabled="isBusy || uploadingSlot !== null"
-                @click="extractPdfs"
-              >{{ isBusy && busyAction === 'extract' ? '변환 중...' : 'PDF변환' }}</button>
-            </div>
+            <div class="ia-section-title">보험설계서 <span class="theme-meta">(최대 4개)</span></div>
             <p v-if="!isNewMode" class="theme-meta ia-extract-status">
               기존보험: {{ extractedExisting ? '변환됨 ✓' : '—' }} · 설계서: {{ extractedProposalCount }}건 변환됨
             </p>
@@ -248,6 +239,13 @@
               :disabled="isBusy"
               @click="saveRecord"
             >{{ isBusy && busyAction === 'save' ? '저장 중...' : '저장' }}</button>
+            <button
+              v-if="!isNewMode"
+              type="button"
+              class="ia-btn ia-btn-secondary"
+              :disabled="isBusy || uploadingSlot !== null"
+              @click="extractPdfs"
+            >{{ isBusy && busyAction === 'extract' ? '변환 중...' : 'PDF변환' }}</button>
             <button
               v-if="!isNewMode"
               type="button"
@@ -735,14 +733,6 @@ function formatDate(iso?: string) {
 }
 
 .ia-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-
-.ia-section-title-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.ia-section-title-row .ia-pdf-btn { text-transform: none; letter-spacing: normal; }
 
 .ia-extract-status { margin: 0; }
 
