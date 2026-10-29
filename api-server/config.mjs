@@ -78,7 +78,10 @@ export function getConfig() {
   const webPort = resolveWebPort()
   return {
     apiPort,
-    apiBase: (process.env.NUXT_PUBLIC_API_BASE || process.env.API_BASE_URL || `http://localhost:${apiPort}`).replace(/\/$/, ''),
+    // 업로드 이미지 등 절대 URL prefix 용. NUXT_PUBLIC_API_BASE는 Nuxt 클라이언트가
+    // same-origin 상대경로로 쓰라고 일부러 비워두는 값이라 여기 쓰면 안 됨 — 공개 접근
+    // 가능한 내 도메인인 SITE_URL을 기준으로 삼는다.
+    apiBase: (process.env.API_BASE_URL || process.env.SITE_URL || `http://localhost:${apiPort}`).replace(/\/$/, ''),
     siteUrl: (process.env.SITE_URL || `http://localhost:${webPort}`).replace(/\/$/, ''),
     sessionSecret: process.env.NUXT_SESSION_PASSWORD || process.env.SESSION_SECRET || process.env.JWT_SECRET,
     naverClientId: process.env.NAVER_CLIENT_ID,
