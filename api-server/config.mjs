@@ -78,7 +78,7 @@ export function getConfig() {
   const webPort = resolveWebPort()
   return {
     apiPort,
-    apiBase: (process.env.API_BASE_URL || `http://localhost:${apiPort}`).replace(/\/$/, ''),
+    apiBase: (process.env.NUXT_PUBLIC_API_BASE || process.env.API_BASE_URL || `http://localhost:${apiPort}`).replace(/\/$/, ''),
     siteUrl: (process.env.SITE_URL || `http://localhost:${webPort}`).replace(/\/$/, ''),
     sessionSecret: process.env.NUXT_SESSION_PASSWORD || process.env.SESSION_SECRET || process.env.JWT_SECRET,
     naverClientId: process.env.NAVER_CLIENT_ID,
